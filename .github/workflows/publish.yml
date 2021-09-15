@@ -1,0 +1,40 @@
+name: Upload Python Package
+
+on:
+  push:
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+jobs:
+  publish-package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+    - name: Checkout Repo
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # avoids shallow checkout as needed by setuptools-scm
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+    - name: Build Project
+      run: |
+        python -m pip install --upgrade pip setuptools tox twine
+        python -m tox -e clean,build
+    - name: Publish Test PyPi
+      env:
+        TWINE_USERNAME: ${{ secrets.TEST_PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_PASSWORD }}
+      run: |
+        python -m twine check dist/*
+        python -m twine upload --repository testpypi dist/*
+    - name: Publish PyPi
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: |
+        python -m twine check dist/*
+        python -m twine upload --repository pypi dist/*
