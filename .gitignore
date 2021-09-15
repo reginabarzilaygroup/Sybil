@@ -70,6 +70,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/api/*
+docs/_rst/*
 
 # PyBuilder
 target/
@@ -127,3 +129,16 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Editors
+.vscode/
+.idea/
+
+# Vagrant
+.vagrant/
+
+# Mac/OSX
+.DS_Store
+
+# Windows
+Thumbs.db
