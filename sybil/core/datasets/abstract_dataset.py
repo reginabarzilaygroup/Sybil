@@ -9,29 +9,22 @@ import json
 import traceback
 from collections import Counter
 from sandstone.datasets.loader.factory import get_input_loader
-from sandstone.utils.risk_factors import parse_risk_factors, RiskFactorVectorizer
-from scipy.stats import entropy
 from sandstone.utils.generic import log
-from sandstone.utils.generic import get_path_for_x
 import pdb
 import copy
 import torch 
 
+# Error Messages
 METAFILE_NOTFOUND_ERR = "Metadata file {} could not be parsed! Exception: {}!"
 LOAD_FAIL_MSG = "Failed to load image: {}\nException: {}"
 
-DEVICE_TO_ID = {'Lorad Selenia': 1,
-                'Hologic Selenia': 1,
-                'Senograph DS ADS_43.10.1':2,
-                'Selenia Dimensions': 0,
-                'Selenia Dimensions C-View':3}
+# Constants
+IMG_PAD_PATH = 'datafiles/pad.tif'
+ALIGNMENT_NUM_IMGS = 200
 DEBUG_SIZE=1000
 
 
-DATASET_ITEM_KEYS = ['ssn', 'pid', 'exam', 'series', 'birads', 'y_seq', 'y_mask', 'time_at_event', 'device', 'device_is_known',
-            'time_seq', 'view_seq', 'side_seq', 'y_l', 'y_r', 'y_seq_r', 'y_mask_r', 'time_at_event_r', 'y_seq_l', 'y_mask_l', 
-            'time_at_event_l', 'drug_activ', 'drug_activ_known', 'concetrations', 'molecule', 'baseline_knowledge', 'context_seq', 'query_seq', 
-            'padded_indices', 'text', 'x_text', 'pd-l1_score', 'tmb', 'omit_sample']
+DATASET_ITEM_KEYS = ['pid', 'exam', 'series', 'y_seq', 'y_mask', 'time_at_event', 'cancer_laterality', 'has_annotation',  'volume_annotations','annotation_areas']
 
 
 class Abstract_Dataset(data.Dataset):
@@ -69,39 +62,13 @@ class Abstract_Dataset(data.Dataset):
             assert self.args.region_annotations_filepath, 'ANNOTATIONS METADATA FILE NOT SPECIFIED'
             self.annotations_metadata = json.load(open(self.args.region_annotations_filepath, 'r'))
             
-        self.path_to_hidden_dict = {}
         self.dataset = self.create_dataset(split_group, args.img_dir)
         if len(self.dataset) == 0:
             return
-        if split_group == 'train' and self.args.data_fraction < 1.0:
-            self.dataset = np.random.choice(self.dataset, int(len(self.dataset)*self.args.data_fraction), replace=False)
-        try:
-            self.add_device_to_dataset()
-        except:
-            log("Could not add device information to dataset", args)
-        for d in self.dataset:
-            if 'exam' in d and 'year' in d:
-                args.exam_to_year_dict[d['exam']] = d['year']
-            if 'device_name' in d and 'exam' in d:
-                args.exam_to_device_dict[d['exam']] = d['device_name']
+        
         log(self.get_summary_statement(self.dataset, split_group), args)
-        args.h_arr, args.w_arr = None, None
-        self.risk_factor_vectorizer = None
-        if self.args.use_risk_factors and 'nlst' not in self.args.dataset:
-            self.risk_factor_vectorizer = RiskFactorVectorizer(args)
-            self.add_risk_factors_to_dataset()
-        if self.args.pred_drug_activ:
-            if 'recursion' in self.args.dataset:
-                self.args.drug_to_y = json.load(open(os.path.join(self.args.metadata_dir, self.args.drug_activity_json_path),'r'))
-            else:
-                assert 'cell_painter' in self.args.dataset
-                self.args.drug_to_y = {k:{'active':v['puma_assay_labels'] + v['morpho_assay_labels'] ,'puma_active': v['puma_assay_labels'], 'morpho_active': v['morpho_assay_labels'], 'active_split':v['split']} for k,v in self.metadata_json.items()}
-
-        if 'dist_key' in self.dataset[0]:
-            dist_key = 'dist_key'
-        else:
-            dist_key = 'y'
-
+        
+        dist_key = 'y'
         label_dist = [d[dist_key] for d in self.dataset]
         label_counts = Counter(label_dist)
         weight_per_label = 1./ len(label_counts)
@@ -112,6 +79,10 @@ class Abstract_Dataset(data.Dataset):
             log("Class counts are: {}".format(label_counts), args)
             log("Label weights are {}".format(label_weights), args)
         self.weights = [ label_weights[d[dist_key]] for d in self.dataset]
+
+    @property
+    def PAD_PATH(self):
+        return IMG_PAD_PATH
 
     @property
     @abstractmethod
@@ -184,102 +155,66 @@ class Abstract_Dataset(data.Dataset):
                 'y': sample['y']
                 }
 
+            if self.args.use_region_annotations:
+                if not self.args.load_annotations_from_hidden:
+                    mask = torch.abs(mask)
+                    mask_area = mask.sum(dim=(-1,-2) ).unsqueeze(-1).unsqueeze(-1)
+                    mask_area[mask_area==0] = 1
+                    mask = mask/mask_area
+                    item['image_annotations'] = mask
+                else:
+                    item['image_annotations']= sample['image_annotations']
+                item['slice_ids'] = sample['slice_ids']
+            
             for key in DATASET_ITEM_KEYS:
                 if key in sample:
                     item[key] = sample[key]
 
-            if self.args.use_risk_factors:
-                item['risk_factors'] = sample['risk_factors']
-            
-            if self.args.use_region_annotations:
-                item['mask'] = mask
- 
             return item
         except Exception:
             path_key =  'paths' if  self.args.multi_image  else 'path'
-            warnings.warn(LOAD_FAIL_MSG.format(sample[path_key], traceback.print_exc()))
+            warnings.warn(LOAD_FAIL_MSG.format(sample[path_key], traceback.print_exc()))  
+    
+    def get_ct_annotations(self, sample):
+        # correct empty lists of annotations
+        if sample['series'] in self.annotations_metadata:
+            self.annotations_metadata[ sample['series'] ] = {k: v for k, v in self.annotations_metadata[ sample['series'] ].items() if len(v) > 0 }
 
+        if sample['series'] in self.annotations_metadata:
+            # check if there is an annotation in a slice
+            sample['volume_annotations'] = np.array([ int( os.path.splitext(os.path.basename(path))[0]  in self.annotations_metadata[ sample['series'] ] ) for path in sample['paths'] ] )
+            # store annotation(s) data (x,y,width,height) for each slice
+            sample['additionals'] = [ {'image_annotations': self.annotations_metadata[ sample['series'] ].get( os.path.splitext(os.path.basename(path))[0], None ) } for path in sample['paths'] ]
+        else:
+            sample['volume_annotations'] = np.array([ 0  for _ in sample['paths'] ])
+            sample['additionals'] = [ {'image_annotations': None }  for path in sample['paths'] ]
+        return sample
 
-    def add_risk_factors_to_dataset(self):
-        for sample in self.dataset:
-            sample['risk_factors'] = self.risk_factor_vectorizer.get_risk_factors_for_sample(sample)
+    def annotation_summary_msg(self, dataset):
+        annotations = [np.sum(d['volume_annotations']) for d in dataset ]
+        annotation_dist =  Counter(annotations)
+        annotation_dist = dict( sorted( annotation_dist.items(), key = lambda i: i[0] ) )
+        num_annotations = sum([ i > 0 for i in annotations])
+        mean_dist = np.mean([k for k in annotation_dist.values() if k!=0])
+        return '\nAnnotations: Dataset has {} annotated samples. Number of annotations per sample has the following distribution {}, with mean {} \n'.format(num_annotations, annotation_dist, mean_dist)
+                                                        
 
-    def add_device_to_dataset(self):
-        path_to_device, exam_to_device = self.build_path_to_device_map()
-        for d in self.dataset:
-
-            paths = [d['path']] if 'path' in d else d['paths']
-            d['device_name'], d['device'], d['device_is_known'] = [], [], []
-
-            for path in paths:
-                device = path_to_device[path] if path in path_to_device else 'UNK'
-                device_id = DEVICE_TO_ID[device] if device in DEVICE_TO_ID else 0
-                device_is_known = device in DEVICE_TO_ID
-
-                d['device_name'].append(device.replace(' ', '_') if device is not None else "<UNK>")
-                d['device'].append(device_id)
-                d['device_is_known'].append(device_is_known)
-
-            single_image = len(paths) == 1
-            if single_image:
-                d['device_name'] = d['device_name'][0]
-                d['device'] = d['device'][0]
-                d['device_is_known'] = d['device_is_known'][0]
-            else:
-                d['device_name'] = np.array(d['device_name'])
-                d['device'] = np.array(d['device'])
-                d['device_is_known'] = np.array(d['device_is_known'], dtype=int)
-
-        device_dist = Counter([ d['device'] if single_image else d['device'][-1] for d in self.dataset])
-        log("Device Dist: {}".format(device_dist), self.args)
-        if self.split_group == 'train':
-            device_count = list(device_dist.values())
-            self.args.device_entropy = entropy(device_count)
-            log("Device Entropy: {}".format(self.args.device_entropy), self.args)
-
-    def build_path_to_device_map(self):
-        path_to_device = {}
-        exam_to_device = {}
-        for mrn_row in json.load(open('/Mounts/phsvna1/CCDS-DRCL/metadata/mammo_metadata_all_years_only_breast_cancer_nov21_2019.json','r')):
-            for exam in mrn_row['accessions']:
-                exam_id = exam['accession']
-                for file, device, view in zip(exam['files'], exam['manufacturer_models'], exam['views']):
-                    device_name = '{} {}'.format(device, 'C-View') if 'C-View' in view else device
-                    path_to_device[file] = device_name
-                    exam_to_device[exam_id] = device_name
-        return path_to_device, exam_to_device
-
-
-    def image_paths_by_views(self, exam):
+    def get_scaled_annotation_area(self, sample):
         '''
-        Determine images of left and right CCs and MLO.
-        Args:
-        exam - a dictionary with views and files sorted relatively.
-        returns:
-        4 lists of image paths of each view by this order: left_ccs, left_mlos, right_ccs, right_mlos. Force max 1 image per view.
-        Note: Validation of cancer side is performed in the query scripts/from_db/cancer.py in OncoQueries
+        no_box = [{'width': 0, 'height': 0}]
+        if sample['series'] in self.annotations_metadata:
+            # total area of bounding boxes in 
+            areas_per_slice = [ [ box['width']*box['height'] for box in self.annotations_metadata[ sample['series'] ].get( os.path.splitext(os.path.basename(path))[0], no_box ) ] for path in sample['paths'] ]
+            return np.array( [ np.sum(areas) for areas in areas_per_slice] )
+        else:
+            return np.array([ 0  for _ in sample['paths'] ])
         '''
-        source_dir = '/home/{}'.format(self.args.unix_username) if self.args.is_ccds_server else ''
+        areas = []
+        for additional in sample['additionals'] :
+            mask = get_scaled_annotation_mask(additional, self.args, scale_annotation=False)
+            areas.append( mask.sum()/ ( mask.shape[0] * mask.shape[1] ) )
+        return np.array(areas)
+    
 
-        def get_view(view_name):
-            image_paths_w_view = [(view, image_path) for view, image_path in zip(exam['views'], exam['files']) if view.startswith(view_name)]
+    
 
-            if self.args.use_c_view_if_available:
-                filt_image_paths_w_view = [(view, image_path) for view, image_path in image_paths_w_view if 'C-View' in view]
-                if len(filt_image_paths_w_view) > 0:
-                    image_paths_w_view = filt_image_paths_w_view
-            else:
-                image_paths_w_view = [(view, image_path) for view, image_path in image_paths_w_view if 'C-View' not in view]
-
-            image_paths_w_view = image_paths_w_view[:1]
-            image_paths = []
-            for _, path in image_paths_w_view:
-                image_paths.append(source_dir + path)
-            return image_paths
-
-
-        left_ccs = get_view('L CC')
-        left_mlos = get_view('L MLO')
-        right_ccs = get_view('R CC')
-        right_mlos = get_view('R MLO')
-        return left_ccs, left_mlos, right_ccs, right_mlos

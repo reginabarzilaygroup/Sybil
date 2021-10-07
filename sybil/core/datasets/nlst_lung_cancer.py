@@ -5,9 +5,9 @@ import pickle
 from sandstone.utils.generic import log
 from sandstone.datasets.abstract_ct_dataset import Abstract_CT_Dataset
 from sandstone.datasets.factory import RegisterDataset
-from sandstone.utils.generic import normalize_dictionary
 from collections import Counter
 import copy 
+from utils import fit_to_length
 #
 from sandstone.utils.nlst_risk_factors import NLSTRiskFactorVectorizer
 
@@ -18,29 +18,36 @@ GOOGLE_SPLITS_FILENAME = '/Mounts/rbg-storage1/datasets/NLST/Shetty_et_al(Google
 CORRUPTED_PATHS = '/Mounts/rbg-storage1/datasets/NLST/corrupted_img_paths.pkl'
 
 RACE_ID_KEYS = {
-            1:"White",
-            2:"Black or African-American",
-            3:"Asian",
-            4:"American Indian or Alaskan Native",
-            5:"Native Hawaiian or Other Pacific Islander", 
-            6:"2+"
-            }
+1:"white",
+2:"black",
+3:"asian",
+4:"american_indian_alaskan",
+5:"native_hawaiian_pacific",
+6:"hispanic"
+}
 ETHNICITY_KEYS = {
     1:"Hispanic or Latino",
     2:"Neither Hispanic nor Latino"
     }
-
 GENDER_KEYS = {
     1: "Male",
     2: "Female"
     }
+EDUCAT_LEVEL = {
+1: 1, # 8th grade = less than HS
+2: 1, # 9-11th = less than HS
+3: 2, # HS Grade
+4: 3, # Post-HS
+5: 4, # Some College
+6: 5, # Bachelors = College Grad
+7: 6  # Graduate School = Postrad/Prof
+        }
 
 @RegisterDataset('nlst_cancer_full_future')
 class NLST_Survival_Dataset(Abstract_CT_Dataset):
     """
     NLST Dataset
     """
-
     def create_dataset(self, split_group, img_dir):
         """
         Gets the dataset from the paths and labels in the json.
@@ -54,9 +61,10 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
         self.corrupted_paths = self.CORRUPTED_PATHS['paths']
         self.corrupted_series = self.CORRUPTED_PATHS['series']
         self.risk_factor_vectorizer = NLSTRiskFactorVectorizer(self.args)
-        if not self.args.cross_val_seed == 0:
+        
+        if not self.args.assign_splits:
             np.random.seed(self.args.cross_val_seed)
-            self.assign_institutions_splits(self.metadata_json)
+            self.assign_splits(self.metadata_json)
 
         dataset = []
         
@@ -72,7 +80,7 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
                 if self.args.use_only_thin_cuts_for_ct and split_group in ['train', 'dev']:
                     thinnest_series_id = self.get_thinnest_cut(exam_dict)
 
-                elif split == 'test' and self.args.cross_val_seed != 0:
+                elif split == 'test' and self.args.assign_splits:
                     thinnest_series_id = self.get_thinnest_cut(exam_dict)
 
                 elif split == 'test' :
@@ -83,7 +91,7 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
                     if len(thinnest_series_id) > 0:
                         thinnest_series_id = thinnest_series_id[0]
                     elif len(thinnest_series_id) == 0:
-                        if self.args.cross_val_seed != 0:
+                        if self.args.assign_splits:
                             thinnest_series_id = self.get_thinnest_cut(exam_dict)
                         else:
                             continue
@@ -185,11 +193,8 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
         if self.args.use_risk_factors:
             sample['risk_factors'] = self.get_risk_factors(pt_metadata, screen_timepoint, return_dict = False)
 
-        if self.args.instance_discrim:
-            sample = self.prep_contrastive_setup(sample, sorted_img_paths, sorted_slice_locs, exam_dict['exam'], series_id, self.args)
-        else:
-            sample['paths'] =  self.fit_to_length(sorted_img_paths, self.PAD_PATH, self.args.num_images, truncate_method = self.args.truncation_method, pad_method = self.args.padding_method )
-            sample['slice_locations'] = self.fit_to_length(sorted_slice_locs, '<PAD>', self.args.num_images, truncate_method = self.args.truncation_method, pad_method = self.args.padding_method)
+        sample['paths'] =  fit_to_length(sorted_img_paths, self.PAD_PATH, self.args.num_images, truncate_method = self.args.truncation_method, pad_method = self.args.padding_method )
+        sample['slice_locations'] = fit_to_length(sorted_slice_locs, '<PAD>', self.args.num_images, truncate_method = self.args.truncation_method, pad_method = self.args.padding_method)
         
         if self.args.use_annotations: 
             sample = self.get_ct_annotations(sample)
@@ -256,14 +261,6 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
         
         return np.array( [int(right), int(left), int(other)] )
 
-    def get_cancer_loc(self, pt_metadata):
-        locations = ['locrhil', 'locrlow', 'locrmid', 'locrmsb', 'locrup', 'loclup', 'loclmsb', 'locllow', 'loclhil', 'loclin', 'loccar',  'locmed', 'locoth', 'locunk']
-        binary_loc = np.zeros(len(locations))
-        for i, loc in enumerate(locations):
-            if pt_metadata[loc][0]> 0:
-                binary_loc[i] = 1
-        return binary_loc
-
     def order_slices(self, img_paths, slice_locations):
         sorted_ids = np.argsort(slice_locations)
         sorted_img_paths = np.array(img_paths)[sorted_ids].tolist()
@@ -326,6 +323,13 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
         else:
             return np.array([ v for v in risk_factors.values() if not isinstance(v, str)])
     
+    def assign_splits(self, meta):
+        if self.args.split_type == 'institution_split':
+            self.assign_institutions_splits(meta)
+        elif self.args.split_type == 'random':
+            for idx in range(len(meta)):
+                meta[idx]['split'] = np.random.choice(['train','dev','test'], p = self.args.split_probs) 
+        
     def assign_institutions_splits(self, meta):
         institutions = set([ m['pt_metadata']['cen'][0] for m in meta])
         institutions = sorted(institutions)
@@ -333,10 +337,6 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
         for idx in range(len(meta)):
             meta[idx]['split'] = institute_to_split[meta[idx]['pt_metadata']['cen'][0]]
     
-    def assign_splits(self, meta):
-        for idx in range(len(meta)):
-            meta[idx]['split'] = np.random.choice(['train','dev','test'], p = self.args.split_probs) 
-
     @property
     def task(self):
         return 'CANCER'
@@ -369,10 +369,6 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
     def GOOGLE_SPLITS(self):
         return pickle.load(open(GOOGLE_SPLITS_FILENAME, 'rb'))
 
-
-
-
-
 @RegisterDataset('nlst_risk_factor_full_future')
 class NLST_Risk_Factor(NLST_Survival_Dataset):
     '''
@@ -386,23 +382,6 @@ class NLST_Risk_Factor(NLST_Survival_Dataset):
         y, y_seq, y_mask, time_at_event = self.get_label(pt_metadata, screen_timepoint)
         
         exam_int = int('{}{}{}'.format(int(pid), int(screen_timepoint), int(series_id.split('.')[-1][-3:] ) ) ) 
-        RACE_ID_KEYS = {
-            1:"white",
-            2:"black",
-            3:"asian",
-            4:"american_indian_alaskan",
-            5:"native_hawaiian_pacific",
-            6:"hispanic"
-        }
-        EDUCAT_LEVEL = {
-            1: 1, # 8th grade = less than HS
-            2: 1, # 9-11th = less than HS
-            3: 2, # HS Grade
-            4: 3, # Post-HS
-            5: 4, # Some College
-            6: 5, # Bachelors = College Grad
-            7: 6  # Graduate School = Postrad/Prof
-        }
 
         riskfactors = self.get_risk_factors(pt_metadata, screen_timepoint, return_dict = True)
 
