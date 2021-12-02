@@ -5,8 +5,6 @@ import pwd
 from sandstone.datasets.factory import get_dataset_class
 from pytorch_lightning import Trainer
 
-EMPTY_NAME_ERR = 'Name of augmentation or one of its arguments cant be empty\n\
-                  Use "name/arg1=value/arg2=value" format'
 POSS_VAL_NOT_LIST = 'Flag {} has an invalid list of values: {}. Length of list must be >=1'
 
 def parse_augmentations(raw_augmentations):
@@ -102,15 +100,10 @@ def parse_args(args_strings=None):
     parser.add_argument('--lightning_name', type=str, default='default', help="Name of lightning module to structure training.")
 
     # data
-    parser.add_argument('--dataset', default='mnist', help='Name of dataset from dataset factory to use [default: mnist]')
+    parser.add_argument('--dataset', default='mnist', help='Name of dataset [default: nlst]')
     parser.add_argument('--img_size',  type=int, nargs='+', default=[256, 256], help='width and height of image in pixels. [default: [256,256]')
-    parser.add_argument('--num_chan', type=int, default=3, help='Number of channels in img. [default:3]')
     parser.add_argument('--get_dataset_stats', action='store_true', default=False, help='Whether to compute the mean and std of the training images on the fly rather than using precomputed values')
-    parser.add_argument('--img_mean', type=float, nargs='+', default=[0.2023], help='mean value of img pixels. Per channel. ')
-    parser.add_argument('--img_std', type=float, nargs='+', default=[0.2576], help='std of img pixels. Per channel. ')
-    parser.add_argument('--img_dir', type=str, default='/home/administrator/Mounts/Isilon/pngs16', help='dir of images. Note, image path in dataset jsons should stem from here')
-    parser.add_argument('--metadata_dir', type=str, default='/home/administrator/Mounts/Isilon/metadata', help='dir of metadata jsons.')
-    parser.add_argument('--input_loader_name', type=str, default=None, help = "Name of loader to use (images, hiddens, etc)")
+    parser.add_argument('--metadata_file', type=str, default='/home/administrator/Mounts/Isilon/metadata', help='dir of metadata jsons.')
 
     # Alternative training/testing schemes
     parser.add_argument('--cross_val_seed', type=int, default=0, help="Seed used to generate the partition.")
@@ -121,53 +114,27 @@ def parse_args(args_strings=None):
     #survival analysis setup
     parser.add_argument('--max_followup', type=int, default=5, help='Max followup to predict over')
     
-    # sampling
-    parser.add_argument('--class_bal', action='store_true', default=False, help='Wether to apply a weighted sampler to balance between the classes on each batch.')
-    
     # risk factors
     parser.add_argument('--use_risk_factors', action='store_true', default=False, help='Whether to feed risk factors into last FC of model.') #
     parser.add_argument('--risk_factor_keys', nargs='*', default=[], help='List of risk factors to include in risk factor vector.')
 
     # handling CT slices
-    parser.add_argument('--num_images', type=int, default=1, help='In multi image setting, the number of images per single sample.')
+    parser.add_argument('--max_num_images', type=int, default=200, help='In multi image setting, the number of images per single sample.')
     parser.add_argument('--min_num_images', type=int, default=0, help='In multi image setting, the min number of images per single sample.')
     parser.add_argument('--padding_method',  type=str, default='evenly', help='How to pad image series with black image. Default is evenly distrubted across slices to obtain num_images slices.')
     parser.add_argument('--truncation_method',  type=str, default='evenly', help='How to select slices if image series has more slices than num_images.')
     parser.add_argument('--slice_thickness_filter',  type=float, nargs='*', help='Slice thickness using, if restricting to specific thickness value.')
     parser.add_argument('--cross_section_filter',  type=str, nargs='*', help='Restrict to using specific cross sections [transverse, coronal, sagittal, oblique].')
-    parser.add_argument('--use_only_thin_cuts_for_ct', action='store_true', default=False, help='Wether to use image series with thinnest cuts only.')
+    parser.add_argument('--use_only_thin_cuts', action='store_true', default=False, help='Wether to use image series with thinnest cuts only.')
     
     # region annotations
-    parser.add_argument('--use_region_annotations', action = 'store_true', default = False, help = 'whether to use image-level annotations (pixel labels) in modeling')
-    parser.add_argument('--use_volume_annotations', action = 'store_true', default = False, help = 'whether to use volume-level annotations (image labels) in modeling')
-    parser.add_argument('--region_annotations_filepath', type = str , help = 'Path to annotations file')
-    parser.add_argument('--predict_volume_attentions', action = 'store_true', default = False, help = 'Whether to predict attention scores over volume using annotations. Guided attention loss.')
-    parser.add_argument('--predict_image_attentions', action = 'store_true', default = False, help = 'Whether to predict attention scores over single image using annotations. Guided attention loss.')
+    parser.add_argument('--use_annotations', action = 'store_true', default = False, help = 'whether to use image-level annotations (pixel labels) in modeling')
     parser.add_argument('--annotation_loss_lambda', type = float, default = 1, help = 'Weight of annotation losses')
-    parser.add_argument('--image_attention_loss_lambda', type = float, default = 1, help = 'Weight of loss for predicting image attention scores')
-    parser.add_argument('--volume_attention_loss_lambda', type = float, default = 1, help = 'Weight of loss for predicting volume attention scores')
 
-    # augmentations
-    parser.add_argument('--image_augmentations', nargs='*', default=['scale_2d'], help='List of image-transformations to use [default: ["scale_2d"]] \
-                        Usage: "--image_augmentations trans1/arg1=5/arg2=2 trans2 trans3/arg4=val"')
-    parser.add_argument('--tensor_augmentations', nargs='*', default=['normalize_2d'], help='List of tensor-transformations to use [default: ["normalize_2d"]]\
-                        Usage: similar to image_augmentations')
-    parser.add_argument('--test_image_augmentations', nargs='*', default=['scale_2d'], help='List of image-transformations to use for the dev and test dataset [default: ["scale_2d"]] \
-                        Usage: similar to image_augmentations')
-    parser.add_argument('--test_tensor_augmentations', nargs='*', default=['normalize_2d'], help='List of tensor-transformations to use for the dev and test dataset [default: ["normalize_2d"]]\
-                        Usage: similar to image_augmentations')
-    parser.add_argument('--fix_seed_for_multi_image_augmentations', action='store_true', default=False, help='Whether to use the same seed (same random augmentations) for multi image inputs.')
-    
-    # regularization
-    parser.add_argument('--primary_loss_lambda', type=float, default=1.0,  help='lambda to weigh the primary loss.')
-    
     # learning
     parser.add_argument('--batch_size', type=int, default=32, help='batch size for training [default: 128]')
     parser.add_argument('--init_lr', type=float, default=0.001, help='initial learning rate [default: 0.001]')
     parser.add_argument('--dropout', type=float, default=0.25, help='Amount of dropout to apply on last hidden layer [default: 0.25]')
-    parser.add_argument('--objective', type=str, default="cross_entropy", help='objective function to use [default: cross_entropy]')
-    parser.add_argument('--tuning_metric', type=str, default='loss', help='Metric to judge dev set results. Possible options include auc, loss, accuracy [default: loss]')
-    
     parser.add_argument('--optimizer', type=str, default="adam", help='optimizer to use [default: adam]')
     parser.add_argument('--momentum', type=float, default=0, help='Momentum to use with SGD')
     parser.add_argument('--lr_decay', type=float, default=0.1, help='initial learning rate [default: 0.5]')
@@ -175,33 +142,20 @@ def parse_args(args_strings=None):
     
     # schedule
     parser.add_argument('--patience', type=int, default=10, help='number of epochs without improvement on dev before halving learning rate and reloading best model [default: 5]')
-
-    # model
-    parser.add_argument('--model_name', type=str, default='resnet18', help="Form of model, i.e resnet18, aggregator, revnet, etc.")
-    parser.add_argument('--pretrained_on_imagenet', action='store_true', default=False, help='Pretrain the model on imagenet. Only relevant for default models like VGG, resnet etc')
-    parser.add_argument('--pretrained_imagenet_model_name', type=str, default='resnet18', help='Name of pretrained model to load for custom resnets.')
-        
+     
     # model checkpointing
     parser.add_argument('--save_dir', type=str, default='snapshot', help='where to dump the model')
     parser.add_argument('--snapshot', type=str, default=None, help='filename of model snapshot to load[default: None]')
     
     # system 
     parser.add_argument('--num_workers', type=int, default=8, help='num workers for each data loader [default: 4]')
-    
-    # storing results
-    parser.add_argument('--store_hiddens', action='store_true', default=False, help='Save hidden repr from each image to an npz based off results path, git hash and exam name')
-    parser.add_argument('--save_predictions', action='store_true', default=False, help='Save hidden repr from each image to an npz based off results path, git hash and exam name')
-    parser.add_argument('--hiddens_dir', type=str, default='hiddens/test_run', help='Dir to store hiddens npy"s when store_hiddens is true')
-    parser.add_argument('--save_attention_scores', action = 'store_true', default = False, help = 'Whether to save attention scores when using attention mechanism')
-    parser.add_argument('--results_path', type=str, default='logs/test.args', help='where to save the result logs')
-    
+        
     # cache
     parser.add_argument('--cache_path', type=str, default=None, help='dir to cache images.')
-    parser.add_argument('--cache_full_img', action='store_true', default=False, help='Cache full image locally as well as cachable transforms')
 
     # comet logger
-    parser.add_argument('--project_name', type=str, default='sandstone-sandbox', help='Name of project for comet logger')
-    parser.add_argument('--workspace', type=str, default='yala', help='Name of workspace for comet logger')
+    parser.add_argument('--comet_project_name', type=str, default=None, help='Name of project for comet logger')
+    parser.add_argument('--comet_workspace', type=str, default=None, help='Name of workspace for comet logger')
     parser.add_argument('--comet_tags', nargs='*', default=[], help="List of tags for comet logger")
 
     # run
@@ -220,9 +174,6 @@ def parse_args(args_strings=None):
     get_dataset_class(args).set_args(args)
 
     args.unix_username = pwd.getpwuid( os.getuid() )[0]
-
-    # using annotations
-    args.use_annotations = args.use_volume_annotations or args.use_region_annotations
 
     # learning initial state
     args.step_indx = 1
