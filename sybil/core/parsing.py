@@ -7,39 +7,6 @@ from pytorch_lightning import Trainer
 
 POSS_VAL_NOT_LIST = 'Flag {} has an invalid list of values: {}. Length of list must be >=1'
 
-def parse_augmentations(raw_augmentations):
-    """
-    Parse the list of augmentations, given by configuration, into a list of
-    tuple of the augmentations name and a dictionary containing additional args.
-
-    The augmentation is assumed to be of the form 'name/arg1=value/arg2=value'
-
-    :raw_augmentations: list of strings [unparsed augmentations]
-    :returns: list of parsed augmentations [list of (name,additional_args)]
-
-    """
-    augmentations = []
-    for t in raw_augmentations:
-        arguments = t.split('/')
-        name = arguments[0]
-        if name == '':
-            raise Exception(EMPTY_NAME_ERR)
-
-        kwargs = {}
-        if len(arguments) > 1:
-            for a in arguments[1:]:
-                splited = a.split('=')
-                var = splited[0]
-                val = splited[1] if len(splited) > 1 else None
-                if var == '':
-                    raise Exception(EMPTY_NAME_ERR)
-
-                kwargs[var] = val
-
-        augmentations.append((name, kwargs))
-
-    return augmentations
-
 def parse_dispatcher_config(config):
     '''
     Parses an experiment config, and creates jobs. For flags that are expected to be a single item,
@@ -178,28 +145,4 @@ def parse_args(args_strings=None):
     # learning initial state
     args.step_indx = 1
 
-    # Parse list args to appropriate data format
-    parse_list_args(args)
-
     return args
-
-
-def parse_list_args(args):
-    """Converts list args to their appropriate data format.
-
-    Includes parsing image dimension args, augmentation args,
-    block layout args, and more.
-
-    Arguments:
-        args(Namespace): Config.
-
-    Returns:
-        args but with certain elements modified to be in the
-        appropriate data format.
-    """
-
-    args.image_augmentations = parse_augmentations(args.image_augmentations)
-    args.tensor_augmentations = parse_augmentations(args.tensor_augmentations)
-    args.test_image_augmentations = parse_augmentations(args.test_image_augmentations)
-    args.test_tensor_augmentations = parse_augmentations(args.test_tensor_augmentations)
-    
