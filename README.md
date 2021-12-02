@@ -13,7 +13,7 @@ from sybil import Serie, Sybil
 serie = Serie([dicom_path_1, dicom_path_2, ...])
 
 # Load a trained model
-model = Sybil.from_pretrained("sybil_large")
+model = Sybil.load("sybil_large")
 
 # Get risk scores
 scores = model.score(serie)
@@ -66,3 +66,7 @@ model.finetune(series)
 ```
 
 See our [documentation] for a full description of Sybil's training parameters.
+
+
+## Cite
+
