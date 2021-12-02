@@ -7,15 +7,7 @@ from pytorch_lightning import Trainer
 
 EMPTY_NAME_ERR = 'Name of augmentation or one of its arguments cant be empty\n\
                   Use "name/arg1=value/arg2=value" format'
-BATCH_SIZE_SPLIT_ERR = 'batch_size (={}) should be a multiple of batch_splits (={})'
-INVALID_IMG_TRANSFORMER_SPEC_ERR = 'Invalid image transformer embedding args. Must be length 3, as [name/size=value/dim=value]. Received {}'
-INVALID_IMG_TRANSFORMER_EMBED_SIZE_ERR = 'Image transformer embeddings have different embedding dimensions {}'
-INVALID_NUM_BLOCKS_ERR = 'Invalid block_layout. Must be length 4. Received {}'
-INVALID_BLOCK_SPEC_ERR = 'Invalid block specification. Must be length 2 with "block_name,num_repeats". Received {}'
 POSS_VAL_NOT_LIST = 'Flag {} has an invalid list of values: {}. Length of list must be >=1'
-INVALID_DATASET_FOR_SURVIVAL = "A dataset with '_full_future'  can only be used with survival_analysis_setup and viceversa."
-NPZ_MULTI_IMG_ERROR = "Npz loading code assumes multi images are in one npz and code is only in multi-img code flow."
-SELF_SUPER_ERROR = "Moco and Byol only supported with instance disrimination task. Must be multi image with 2 images"
 
 def parse_augmentations(raw_augmentations):
     """
@@ -49,90 +41,6 @@ def parse_augmentations(raw_augmentations):
         augmentations.append((name, kwargs))
 
     return augmentations
-
-def parse_embeddings(raw_embeddings):
-    """
-    Parse the list of embeddings, given by configuration, into a list of
-    tuple of the embedding embedding_name, size ('vocab size'), and the embedding dimension.
-
-    :raw_embeddings: list of strings [unparsed transformers], each of the form 'embedding_name/size=value/dim=value'
-    :returns: list of parsed embedding objects [(embedding_name, size, dim)]
-
-    For example:
-        --hidden_transformer_embeddings time_seq/size=10/dim=32 view_seq/size=2/dim=32 side_seq/size=2/dim=32
-    returns
-        [('time_seq', 10, 32), ('view_seq', 2, 32), ('side_seq', 2, 32)]
-    """
-    embeddings = []
-    for t in raw_embeddings:
-        arguments = t.split('/')
-        if len(arguments) != 3:
-                raise Exception(INVALID_IMG_TRANSFORMER_SPEC_ERR.format(len(arguments)))
-        name = arguments[0]
-        size = arguments[1].split('=')[-1]
-        dim = arguments[2].split('=')[-1]
-
-        embeddings.append((name, int(size), int(dim)))
-
-    if not all([embed[-1] == int(dim) for embed in embeddings]):
-        raise Exception(INVALID_IMG_TRANSFORMER_EMBED_SIZE_ERR.format([embed[-1] for embed in embeddings]))
-    return embeddings
-
-def validate_raw_block_layout(raw_block_layout):
-    """Confirms that a raw block layout is in the right format.
-
-    Arguments:
-        raw_block_layout(list): A list of strings where each string
-            is a layer layout in the format
-            'block_name,num_repeats-block_name,num_repeats-...'
-
-    Raises:
-        Exception if the raw block layout is formatted incorrectly.
-    """
-
-    # Confirm that each layer is a list of block specifications where
-    # each block specification has length 2 (i.e. block_name,num_repeats)
-    for raw_layer_layout in raw_block_layout:
-        for raw_block_spec in raw_layer_layout.split('-'):
-            if len(raw_block_spec.split(',')) != 2:
-                raise Exception(INVALID_BLOCK_SPEC_ERR.format(raw_block_spec))
-
-
-def parse_block_layout(raw_block_layout):
-    """Parses a ResNet block layout, which is a list of layer layouts
-    with each layer layout in the form 'block_name,num_repeats-block_name,num_repeats-...'
-
-    Example:
-        ['BasicBlock,2',
-         'BasicBlock,1-NonLocalBlock,1',
-         'BasicBlock,3-NonLocalBlock,2-Bottleneck,2',
-         'BasicBlock,2']
-        ==>
-        [[('BasicBlock', 2)],
-         [('BasicBlock', 1), ('NonLocalBlock', 1)],
-         [('BasicBlock', 3), ('NonLocalBlock', 2), ('Bottleneck', 2)],
-         [('BasicBlock', 2)]]
-
-    Arguments:
-        raw_block_layout(list): A list of strings where each string
-            is a layer layout as described above.
-
-    Returns:
-        A list of lists of length 4 (one for each layer of ResNet). Each inner list is
-        a list of tuples, where each tuple is (block_name, num_repeats).
-    """
-
-    validate_raw_block_layout(raw_block_layout)
-
-    block_layout = []
-    for raw_layer_layout in raw_block_layout:
-        raw_block_specs = raw_layer_layout.split('-')
-        layer = [raw_block_spec.split(',') for raw_block_spec in raw_block_specs]
-        layer = [(block_name, int(num_repeats)) for block_name, num_repeats in layer]
-        block_layout.append(layer)
-
-    return block_layout
-
 
 def parse_dispatcher_config(config):
     '''
@@ -308,20 +216,6 @@ def parse_args(args_strings=None):
         args.distributed_backend = 'ddp'
         args.replace_sampler_ddp = False
 
-    if args.debug:
-        args.num_workers = 0
-        args.limit_train_batches = 10
-        args.limit_val_batches = 10
-        args.limit_test_batches = 0.1
-        args.comet_tags = 'debug'
-
-    if 'rationale' in args.model_name:
-        args.lightning_name = 'rationale'
-
-    if args.mixup_train or args.scramble_spatial:
-        args.lightning_name = 'private'
-        args.model_name = 'hiddens_mlp'
-
     # Set args particular to dataset
     get_dataset_class(args).set_args(args)
 
@@ -329,10 +223,6 @@ def parse_args(args_strings=None):
 
     # using annotations
     args.use_annotations = args.use_volume_annotations or args.use_region_annotations
-    
-    # pretrained model
-    if args.use_pretrained_encoder:
-        assert args.snapshot is not None, 'ARGS ERROR! --use_pretrained_encoder flag used while --snapshot is None'
 
     # learning initial state
     args.step_indx = 1
@@ -340,25 +230,8 @@ def parse_args(args_strings=None):
     # Parse list args to appropriate data format
     parse_list_args(args)
 
-    # Check whether certain args or arg combinations are valid
-    validate_args(args)
-
     return args
 
-def validate_args(args):
-    """Checks whether certain args or arg combinations are valid.
-
-    Raises:
-        Exception if an arg or arg combination is not valid.
-    """
-
-
-    if args.survival_analysis_setup != ('_full_future' in args.dataset):
-        raise ValueError(INVALID_DATASET_FOR_SURVIVAL)
-
-    if (args.byol) and not (args.instance_discrim and args.multi_image and args.num_images == 2):
-
-        raise ValueError(SELF_SUPER_ERROR)
 
 def parse_list_args(args):
     """Converts list args to their appropriate data format.
@@ -378,6 +251,4 @@ def parse_list_args(args):
     args.tensor_augmentations = parse_augmentations(args.tensor_augmentations)
     args.test_image_augmentations = parse_augmentations(args.test_image_augmentations)
     args.test_tensor_augmentations = parse_augmentations(args.test_tensor_augmentations)
-
-    args.block_layout = parse_block_layout(args.block_layout)
-    args.hidden_transformer_embeddings = parse_embeddings(args.hidden_transformer_embeddings) if args.hidden_transformer_embeddings is not None else None
+    

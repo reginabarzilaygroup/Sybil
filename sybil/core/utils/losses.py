@@ -14,7 +14,6 @@ def get_cross_entropy_loss(model_output, batch, args):
     return loss * args.primary_loss_lambda, logging_dict, predictions
 
 def get_survival_loss(model_output, batch, args):
-    assert args.survival_analysis_setup
     logging_dict, predictions = OrderedDict(), OrderedDict()
     logit = model_output['logit']
     y_seq, y_mask = batch['y_seq'], batch['y_mask']
