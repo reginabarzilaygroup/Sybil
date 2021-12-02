@@ -44,8 +44,7 @@ class Abstract_Dataset(data.Dataset):
         constructs: standard pytorch Dataset obj, which can be fed in a DataLoader for batching
         '''
         super(Abstract_Dataset, self).__init__()
-        args.metadata_path = os.path.join(args.metadata_dir,
-                                          self.METADATA_FILENAME)
+        args.metadata_path = os.path.join(args.metadata_file)
 
         self.split_group = split_group
         self.args = args
@@ -75,9 +74,9 @@ class Abstract_Dataset(data.Dataset):
         label_weights = {
             label: weight_per_label/count for label, count in label_counts.items()
             }
-        if args.class_bal and args.num_classes < 10:
-            log("Class counts are: {}".format(label_counts), args)
-            log("Label weights are {}".format(label_weights), args)
+        
+        log("Class counts are: {}".format(label_counts), args)
+        log("Label weights are {}".format(label_weights), args)
         self.weights = [ label_weights[d[dist_key]] for d in self.dataset]
 
     @property

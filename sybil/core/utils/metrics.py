@@ -8,7 +8,7 @@ import warnings
 EPSILON = 1e-6
 BINARY_CLASSIF_THRESHOLD = 0.5
 
-def get_accuracy_metrics(logging_dict, args):
+def get_classification_metrics(logging_dict, args):
     stats_dict = OrderedDict()
 
     golds = np.array(logging_dict['golds']).reshape(-1)

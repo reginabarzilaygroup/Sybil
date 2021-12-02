@@ -63,16 +63,13 @@ def parse_args(args_strings=None):
     parser.add_argument('--fine_tune', action='store_true', default=False, help='Whether or not to fine_tune model')
     parser.add_argument('--num_epochs_fine_tune', type=int, default=1, help='Num epochs to finetune model')
     
-    # lightning module
-    parser.add_argument('--lightning_name', type=str, default='default', help="Name of lightning module to structure training.")
-
     # data
     parser.add_argument('--dataset', default='mnist', help='Name of dataset [default: nlst]')
     parser.add_argument('--img_size',  type=int, nargs='+', default=[256, 256], help='width and height of image in pixels. [default: [256,256]')
     parser.add_argument('--get_dataset_stats', action='store_true', default=False, help='Whether to compute the mean and std of the training images on the fly rather than using precomputed values')
     parser.add_argument('--metadata_file', type=str, default='/home/administrator/Mounts/Isilon/metadata', help='dir of metadata jsons.')
 
-    # Alternative training/testing schemes
+    # alternative training/testing schemes
     parser.add_argument('--cross_val_seed', type=int, default=0, help="Seed used to generate the partition.")
     parser.add_argument('--assign_splits', action='store_true', default=False, help = "Whether to assign different splits than those predetermined in dataset")
     parser.add_argument('--split_type', type=str, default='random', help="How to split dataset if assign_split = True. Usage: ['random', 'institution_split'].")
@@ -97,6 +94,9 @@ def parse_args(args_strings=None):
     # region annotations
     parser.add_argument('--use_annotations', action = 'store_true', default = False, help = 'whether to use image-level annotations (pixel labels) in modeling')
     parser.add_argument('--annotation_loss_lambda', type = float, default = 1, help = 'Weight of annotation losses')
+
+    # model
+    parser.add_argument('--model_name', type=str, default='sybil', help="Form of model, i.e resnet18, aggregator, revnet, etc.")
 
     # learning
     parser.add_argument('--batch_size', type=int, default=32, help='batch size for training [default: 128]')

@@ -11,7 +11,7 @@ def get_cross_entropy_loss(model_output, batch, args):
     logging_dict['cross_entropy_loss'] = loss.detach()
     predictions['probs'] = F.softmax(logit, dim=-1).detach()
     predictions['golds'] = batch['y']
-    return loss * args.primary_loss_lambda, logging_dict, predictions
+    return loss, logging_dict, predictions
 
 def get_survival_loss(model_output, batch, args):
     logging_dict, predictions = OrderedDict(), OrderedDict()
@@ -22,9 +22,9 @@ def get_survival_loss(model_output, batch, args):
     predictions['probs'] = F.sigmoid(logit).detach()
     predictions['golds'] = batch['y']
     predictions['censors'] = batch['time_at_event']
-    return loss * args.primary_loss_lambda, logging_dict, predictions
+    return loss, logging_dict, predictions
 
-def compute_annotation_loss(model_output, batch, args):
+def get_annotation_loss(model_output, batch, args):
     total_loss, logging_dict, predictions = 0, OrderedDict(), OrderedDict()
 
     B, _, N, H, W, = model_output['activ'].shape

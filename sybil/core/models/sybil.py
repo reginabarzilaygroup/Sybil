@@ -43,7 +43,7 @@ class SybilNet(nn.Module):
         
         return pool_output
 
-class RiskFactorPredictor(Sybil):
+class RiskFactorPredictor(SybilNet):
     def __init__(self, args):
         super(RiskFactorPredictor, self).__init__(args)
 

@@ -89,19 +89,13 @@ def get_train_dataset_loader(args, train_data, batch_size):
         train_data_loader: iterator that returns batches
         dev_data_loader: iterator that returns batches
     '''
-    if args.class_bal:
-        if args.distributed_backend == 'ddp':
-            sampler = DistributedWeightedSampler(train_data, weights=train_data.weights, replacement=True, rank=args.global_rank, num_replicas = args.world_size)
-        else:
-            sampler = data.sampler.WeightedRandomSampler(
-                weights=train_data.weights,
-                num_samples=len(train_data),
-                replacement=True)
+    if args.distributed_backend == 'ddp':
+        sampler = DistributedWeightedSampler(train_data, weights=train_data.weights, replacement=True, rank=args.global_rank, num_replicas = args.world_size)
     else:
-        if args.distributed_backend == 'ddp':
-            sampler = torch.utils.data.distributed.DistributedSampler(train_data, rank=args.global_rank, num_replicas = args.world_size)
-        else:
-            sampler = data.sampler.RandomSampler(train_data)
+        sampler = data.sampler.WeightedRandomSampler(
+            weights=train_data.weights,
+            num_samples=len(train_data),
+            replacement=True)
 
     train_data_loader = data.DataLoader(
                     train_data,
