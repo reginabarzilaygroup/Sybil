@@ -34,14 +34,14 @@ GENDER_KEYS = {
     2: "Female"
     }
 EDUCAT_LEVEL = {
-1: 1, # 8th grade = less than HS
-2: 1, # 9-11th = less than HS
-3: 2, # HS Grade
-4: 3, # Post-HS
-5: 4, # Some College
-6: 5, # Bachelors = College Grad
-7: 6  # Graduate School = Postrad/Prof
-        }
+    1: 1, # 8th grade = less than HS
+    2: 1, # 9-11th = less than HS
+    3: 2, # HS Grade
+    4: 3, # Post-HS
+    5: 4, # Some College
+    6: 5, # Bachelors = College Grad
+    7: 6  # Graduate School = Postrad/Prof
+            }
 
 @RegisterDataset('nlst_cancer_full_future')
 class NLST_Survival_Dataset(Abstract_CT_Dataset):

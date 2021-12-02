@@ -1,30 +1,41 @@
-from sandstone.learn.losses.factory import RegisterLoss
+
 import torch 
+import torch.nn as nn
 import torch.nn.functional as F 
 from collections import OrderedDict 
 
+def get_cross_entropy_loss(model_output, batch, args):
+    logging_dict, predictions = OrderedDict(), OrderedDict()
+    logit = model_output['logit']
+    loss = F.cross_entropy(logit, batch['y'].long())
+    logging_dict['cross_entropy_loss'] = loss.detach()
+    predictions['probs'] = F.softmax(logit, dim=-1).detach()
+    predictions['golds'] = batch['y']
+    return loss * args.primary_loss_lambda, logging_dict, predictions
 
-@RegisterLoss("annotation_loss")
-def compute_annotation_loss(model_output, batch, model, args):
+def get_survival_loss(model_output, batch, args):
+    assert args.survival_analysis_setup
+    logging_dict, predictions = OrderedDict(), OrderedDict()
+    logit = model_output['logit']
+    y_seq, y_mask = batch['y_seq'], batch['y_mask']
+    loss = F.binary_cross_entropy_with_logits(logit, y_seq.float(), weight=y_mask.float(), size_average=False)/ torch.sum(y_mask.float())
+    logging_dict['survival_loss'] = loss.detach()
+    predictions['probs'] = F.sigmoid(logit).detach()
+    predictions['golds'] = batch['y']
+    predictions['censors'] = batch['time_at_event']
+    return loss * args.primary_loss_lambda, logging_dict, predictions
+
+def compute_annotation_loss(model_output, batch, args):
     total_loss, logging_dict, predictions = 0, OrderedDict(), OrderedDict()
 
     B, _, N, H, W, = model_output['activ'].shape
 
     batch_mask = batch['has_annotation']
     
-    if not hasattr(model.model , 'pool'):
-        pool_names = ['']
-    else:
-        pool_names = model.model.pool.all_pool_names
-    
-    for pool_name in pool_names:
-        if args.multipool_pools is not None:
-            key = '{}_'.format(pool_name)
-        else:
-            key = ''
+    for attn_num in [1,2]:
 
         side_attn = -1
-        if args.predict_image_attentions and model_output.get('{}image_attention'.format(key), None) is not None:
+        if model_output.get('image_attention_{}'.format(attn_num), None) is not None:
             if len(batch['image_annotations'].shape) == 4:
                 batch['image_annotations'] = batch['image_annotations'].unsqueeze(1)
             
@@ -46,32 +57,32 @@ def compute_annotation_loss(model_output, batch, model, args):
             num_annotated_samples = ( annotation_gold.view(B*N,-1).sum(-1) > 0  ).sum() 
             num_annotated_samples = max(1, num_annotated_samples)
             
-            pred_attn = model_output['{}image_attention'.format(key)] * batch_mask[:, None, None]
+            pred_attn = model_output['image_attention_{}'.format(attn_num)] * batch_mask[:, None, None]
             kldiv = F.kl_div(pred_attn, annotation_gold, reduction='none')*annotation_gold_mask
             
             # sum loss per volume and average over batches
             loss = kldiv.sum()/num_annotated_samples
-            logging_dict['{}image_attention_loss'.format(key)] = loss.detach()
+            logging_dict['image_attention_loss_{}'.format(attn_num)] = loss.detach()
             total_loss += args.image_attention_loss_lambda * loss
             
-            predictions['{}image_attention'.format(key)] = torch.softmax( pred_attn.view(B*N,-1), -1 ).detach()
-            predictions['{}image_annotation'.format(key)] = annotation_gold_mask.view(B*N,-1)
+            predictions['image_attention_{}'.format(attn_num)] = torch.softmax( pred_attn.view(B*N,-1), -1 ).detach()
+            predictions['image_annotation_{}'.format(attn_num)] = annotation_gold_mask.view(B*N,-1)
 
             # attend to cancer side
             cancer_side_mask = (batch['cancer_laterality'][:, :2].sum(-1) == 1).float()[:,None] # only one side is positive
             cancer_side_gold = batch['cancer_laterality'][:, 1].unsqueeze(1).repeat(1,N) # left side (seen as lung on right) is positive class
             num_annotated_samples = max(N * cancer_side_mask.sum(), 1)
-            side_attn = torch.exp(model_output['{}image_attention'.format(key)])
+            side_attn = torch.exp(model_output['image_attention_{}'.format(attn_num)])
             side_attn = side_attn.view(B, N, H, W)
             side_attn = torch.stack([side_attn[:,:,:,:W//2].sum((2,3)), side_attn[:,:,:,W//2:].sum((2,3))], dim = -1) 
             side_attn_log = F.log_softmax(side_attn, dim = -1).transpose(1,2)
             
             loss = (F.cross_entropy(side_attn_log, cancer_side_gold, reduction = 'none') * cancer_side_mask).sum()/num_annotated_samples
-            logging_dict['{}image_side_attention_loss'.format(key)] = loss.detach()
+            logging_dict['image_side_attention_loss_{}'.format(attn_num)] = loss.detach()
             total_loss += args.image_attention_loss_lambda * loss
 
 
-        if args.predict_volume_attentions and model_output.get('{}volume_attention'.format(key), None) is not None:
+        if model_output.get('volume_attention_{}'.format(attn_num), None) is not None:
             # find size of annotation box per slice and normalize
             annotation_gold = batch['annotation_areas'].float() * batch_mask[:, None]
             
@@ -87,15 +98,15 @@ def compute_annotation_loss(model_output, batch, model, args):
             # find slices with annotation
             annotation_gold_mask = (annotation_gold > 0 ).float()
 
-            pred_attn = model_output['{}volume_attention'.format(key)] * batch_mask[:, None]
+            pred_attn = model_output['volume_attention_{}'.format(attn_num)] * batch_mask[:, None]
             kldiv = F.kl_div(pred_attn, annotation_gold, reduction='none')*annotation_gold_mask # B, N
             loss = kldiv.sum()/num_annotated_samples
 
-            logging_dict['{}volume_attention_loss'.format(key)] = loss.detach()
+            logging_dict['volume_attention_loss_{}'.format(attn_num)] = loss.detach()
             total_loss += args.volume_attention_loss_lambda * loss
 
-            predictions['{}volume_attention'.format(key)] = torch.softmax(pred_attn, -1).detach()
-            predictions['{}volume_annotation'.format(key)] = annotation_gold_mask
+            predictions['volume_attention_{}'.format(attn_num)] = torch.softmax(pred_attn, -1).detach()
+            predictions['volume_annotation_{}'.format(attn_num)] = annotation_gold_mask
 
             if isinstance(side_attn, torch.Tensor):
                 # attend to cancer side
@@ -103,18 +114,18 @@ def compute_annotation_loss(model_output, batch, model, args):
                 cancer_side_gold = batch['cancer_laterality'][:, 1] # left side (seen as lung on right) is positive class
                 num_annotated_samples = max(cancer_side_mask.sum(), 1)
                 
-                pred_attn = torch.exp(model_output['{}volume_attention'.format(key)])
+                pred_attn = torch.exp(model_output['volume_attention_{}'.format(attn_num)])
                 side_attn = (side_attn * pred_attn.unsqueeze(-1)).sum(1)
                 side_attn_log = F.log_softmax(side_attn, dim = -1)
 
                 loss = (F.cross_entropy(side_attn_log, cancer_side_gold, reduction = 'none') * cancer_side_mask).sum()/num_annotated_samples
-                logging_dict['{}volume_side_attention_loss'.format(key)] = loss.detach()
+                logging_dict['volume_side_attention_loss_{}'.format(attn_num)] = loss.detach()
                 total_loss += args.volume_attention_loss_lambda  * loss
 
 
     return total_loss * args.annotation_loss_lambda, logging_dict, predictions
 
-@RegisterLoss('risk_factor_loss')
+
 def get_risk_factor_loss(model_output, batch, model, args):
     total_loss, logging_dict, predictions = 0, OrderedDict(), OrderedDict()
 

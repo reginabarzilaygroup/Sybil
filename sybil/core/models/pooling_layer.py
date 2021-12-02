@@ -25,10 +25,10 @@ class MultiAttentionPool(nn.Module):
         output = {}
         
         image_pool_out1 = self.image_pool1(x) # contains keys: "multi_image_hidden", "image_attention"
-        volume_pool_out1 = self.volume_pool1(image_pool_out1['multi_image_hidden'])  # contains keys: "hidden", "attention_scores"
+        volume_pool_out1 = self.volume_pool1(image_pool_out1['multi_image_hidden'])  # contains keys: "hidden", "volume_attention"
 
         image_pool_out2 = self.image_pool2(x) # contains keys: "multi_image_hidden"
-        volume_pool_out2 = self.volume_pool2(image_pool_out2['multi_image_hidden']) # contains keys: "hidden", "attention_scores"
+        volume_pool_out2 = self.volume_pool2(image_pool_out2['multi_image_hidden']) # contains keys: "hidden", "volume_attention"
 
         for pool_out, num in [(image_pool_out1, 1), (volume_pool_out1, 1), (image_pool_out2, 2), (volume_pool_out2, 2) ]:
             for key, val in pool_out.items():
@@ -135,7 +135,7 @@ class Simple_AttentionPool(nn.Module):
         x = x.view(spatially_flat_size)
         attention_scores = self.attention_fc(x.transpose(1,2)) #B, N, 1
         
-        output['attention_scores'] = self.logsoftmax(attention_scores.transpose(1,2)).view(B, -1)
+        output['volume_attention'] = self.logsoftmax(attention_scores.transpose(1,2)).view(B, -1)
         attention_scores = self.softmax( attention_scores.transpose(1,2)) #B, 1, N
         
         x = x * attention_scores #B, C, N
@@ -169,7 +169,7 @@ class Simple_AttentionPool_MultiImg(nn.Module):
         x = x.contiguous().view(B*T, C, W*H)
         attention_scores = self.attention_fc(x.transpose(1,2)) #BT, WH , 1
         
-        output['attention_scores'] = self.logsoftmax(attention_scores.transpose(1,2)).view(B, T, -1) 
+        output['image_attention'] = self.logsoftmax(attention_scores.transpose(1,2)).view(B, T, -1) 
         attention_scores = self.softmax( attention_scores.transpose(1,2)) #BT, 1, WH
         
         x = x * attention_scores #BT, C, WH

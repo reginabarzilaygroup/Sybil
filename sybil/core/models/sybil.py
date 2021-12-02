@@ -6,9 +6,9 @@ from models.cumulative_probability_layer import Cumulative_Probability_Layer
 from models.pooling_layer import MultiAttentionPool
 from datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
 
-class Sybil(nn.Module):
+class SybilNet(nn.Module):
     def __init__(self, args):
-        super(Sybil, self).__init__()
+        super(SybilNet, self).__init__()
 
         self.hidden_dim = 512
 

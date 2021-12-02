@@ -1,6 +1,13 @@
 import numpy as np 
 import math 
 
+def order_slices( img_paths, slice_locations):
+    sorted_ids = np.argsort(slice_locations)
+    sorted_img_paths = np.array(img_paths)[sorted_ids].tolist()
+    sorted_slice_locs = np.sort(slice_locations).tolist()
+    return sorted_img_paths, sorted_slice_locs
+
+
 def fit_to_length(arr, pad_token, max_length, truncate_method = 'evenly', pad_method = 'evenly', start_index = 0):
         '''
         Fits arr to max_length by either truncating arr (remove excess from both tails) 
