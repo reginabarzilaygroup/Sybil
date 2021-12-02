@@ -22,23 +22,10 @@ class Cumulative_Probability_Layer(nn.Module):
         return pos_hazard
 
     def forward(self, x):
-        if self.args.make_probs_indep:
-            return self.hazards(x)
-#        hazards = self.hazard_fc(x)
         hazards = self.hazards(x)
         B, T = hazards.size() #hazards is (B, T)
         expanded_hazards = hazards.unsqueeze(-1).expand(B, T, T) #expanded_hazards is (B,T, T)
         masked_hazards = expanded_hazards * self.upper_triagular_mask # masked_hazards now (B,T, T)
         base_hazard = self.base_hazard_fc(x)
-
-        if self.args.survival_formulation == 'cox':
-            cum_prob = base_hazard.expand_as(hazards)
-        elif self.args.survival_formulation == 'accel_fail':
-            dup_hazards = base_hazard.expand_as(hazards)
-            expanded_hazards = dup_hazards.unsqueeze(-1).expand(B, T, T)
-            masked_hazards = expanded_hazards * self.upper_triagular_mask
-            cum_prob = torch.sum(masked_hazards, dim=1)
-        else:
-            assert self.args.survival_formulation == 'mirai'
-            cum_prob = torch.sum(masked_hazards, dim=1) + base_hazard
+        cum_prob = torch.sum(masked_hazards, dim=1) + base_hazard
         return cum_prob
