@@ -1,17 +1,22 @@
-import torch
-from torch.utils import data
-from sandstone.utils.distributed_weighted_sampler import DistributedWeightedSampler
 import hashlib
 import collections.abc as container_abcs
 import re
 
+import torch
+from torch.utils import data
+
+from sybil.utils.sampler import DistributedWeightedSampler
+
+
 string_classes = (str, bytes)
 int_classes = int
-np_str_obj_array_pattern = re.compile(r'[SaUO]')
+np_str_obj_array_pattern = re.compile(r"[SaUO]")
 
 default_collate_err_msg_format = (
     "default_collate: batch must contain tensors, numpy arrays, numbers, "
-    "dicts, MoleculeDatapoint or lists; found {}")
+    "dicts, MoleculeDatapoint or lists; found {}"
+)
+
 
 def default_collate(batch):
     r"""Puts each data field into a tensor with outer dimension batch size"""
@@ -27,9 +32,12 @@ def default_collate(batch):
             storage = elem.storage()._new_shared(numel)
             out = elem.new(storage)
         return torch.stack(batch, 0, out=out)
-    elif elem_type.__module__ == 'numpy' and elem_type.__name__ != 'str_' \
-            and elem_type.__name__ != 'string_':
-        if elem_type.__name__ == 'ndarray' or elem_type.__name__ == 'memmap':
+    elif (
+        elem_type.__module__ == "numpy"
+        and elem_type.__name__ != "str_"
+        and elem_type.__name__ != "string_"
+    ):
+        if elem_type.__name__ == "ndarray" or elem_type.__name__ == "memmap":
             # array of string classes and object
             if np_str_obj_array_pattern.search(elem.dtype.str) is not None:
                 raise TypeError(default_collate_err_msg_format.format(elem.dtype))
@@ -45,75 +53,81 @@ def default_collate(batch):
         return batch
     elif isinstance(elem, container_abcs.Mapping):
         return {key: default_collate([d[key] for d in batch]) for key in elem}
-    elif isinstance(elem, tuple) and hasattr(elem, '_fields'):  # namedtuple
+    elif isinstance(elem, tuple) and hasattr(elem, "_fields"):  # namedtuple
         return elem_type(*(default_collate(samples) for samples in zip(*batch)))
     elif isinstance(elem, container_abcs.Sequence):
         # check to make sure that the elements in batch have consistent size
         it = iter(batch)
         elem_size = len(next(it))
         if not all(len(elem) == elem_size for elem in it):
-            raise RuntimeError('each element in list of batch should be of equal size')
+            raise RuntimeError("each element in list of batch should be of equal size")
         transposed = zip(*batch)
         return [default_collate(samples) for samples in transposed]
-    else:
-        try:
-            # Importing here so chemprop does not become a dependency of sandstone
-            from chemprop.data import MoleculeDatapoint, MoleculeDataset
-            if isinstance(elem, MoleculeDatapoint):
-                data = MoleculeDataset(batch)
-                data.batch_graph()  # Forces computation and caching of the BatchMolGraph for the molecules
-                return data
-
-        except ImportError:
-            pass
 
     raise TypeError(default_collate_err_msg_format.format(elem_type))
 
+
 def ignore_None_collate(batch):
-    '''
+    """
     default_collate wrapper that creates batches only of not None values.
     Useful for cases when the dataset.__getitem__ can return None because of some
     exception and then we will want to exclude that sample from the batch.
-    '''
+    """
     batch = [x for x in batch if x is not None]
     if len(batch) == 0:
         return None
     return default_collate(batch)
 
+
 def get_train_dataset_loader(args, train_data, batch_size):
-    '''
+    """
         Given arg configuration, return appropriate torch.DataLoader
         for train_data and dev_data
 
         returns:
         train_data_loader: iterator that returns batches
         dev_data_loader: iterator that returns batches
-    '''
-    if args.distributed_backend == 'ddp':
-        sampler = DistributedWeightedSampler(train_data, weights=train_data.weights, replacement=True, rank=args.global_rank, num_replicas = args.world_size)
+    """
+    if args.distributed_backend == "ddp":
+        sampler = DistributedWeightedSampler(
+            train_data,
+            weights=train_data.weights,
+            replacement=True,
+            rank=args.global_rank,
+            num_replicas=args.world_size,
+        )
     else:
         sampler = data.sampler.WeightedRandomSampler(
-            weights=train_data.weights,
-            num_samples=len(train_data),
-            replacement=True)
+            weights=train_data.weights, num_samples=len(train_data), replacement=True
+        )
 
     train_data_loader = data.DataLoader(
-                    train_data,
-                    num_workers=args.num_workers,
-                    sampler=sampler,
-                    pin_memory=True,
-                    batch_size=batch_size,
-                    collate_fn=ignore_None_collate)
+        train_data,
+        num_workers=args.num_workers,
+        sampler=sampler,
+        pin_memory=True,
+        batch_size=batch_size,
+        collate_fn=ignore_None_collate,
+    )
 
     return train_data_loader
-    
+
 
 def get_eval_dataset_loader(args, eval_data, batch_size, shuffle):
 
-    if args.distributed_backend == 'ddp':
-        sampler = torch.utils.data.distributed.DistributedSampler(eval_data, shuffle=shuffle, rank=args.global_rank, num_replicas = args.world_size)
+    if args.distributed_backend == "ddp":
+        sampler = torch.utils.data.distributed.DistributedSampler(
+            eval_data,
+            shuffle=shuffle,
+            rank=args.global_rank,
+            num_replicas=args.world_size,
+        )
     else:
-        sampler = torch.utils.data.sampler.RandomSampler(eval_data) if shuffle else torch.utils.data.sampler.SequentialSampler(eval_data)
+        sampler = (
+            torch.utils.data.sampler.RandomSampler(eval_data)
+            if shuffle
+            else torch.utils.data.sampler.SequentialSampler(eval_data)
+        )
     data_loader = torch.utils.data.DataLoader(
         eval_data,
         batch_size=batch_size,
@@ -121,18 +135,22 @@ def get_eval_dataset_loader(args, eval_data, batch_size, shuffle):
         collate_fn=ignore_None_collate,
         pin_memory=True,
         drop_last=False,
-        sampler = sampler)
+        sampler=sampler,
+    )
 
     return data_loader
 
+
 def md5(key):
-    '''
+    """
     returns a hashed with md5 string of the key
-    '''
+    """
     return hashlib.md5(key.encode()).hexdigest()
+
 
 def log(text, args):
     print(text)
+
 
 @torch.no_grad()
 def concat_all_gather(tensor):
@@ -141,7 +159,9 @@ def concat_all_gather(tensor):
     *** Warning ***: torch.distributed.all_gather has no gradient.
     """
 
-    tensors_gather = [torch.ones_like(tensor) for _ in range(torch.distributed.get_world_size())]
+    tensors_gather = [
+        torch.ones_like(tensor) for _ in range(torch.distributed.get_world_size())
+    ]
     torch.distributed.all_gather(tensors_gather, tensor, async_op=False)
     output = torch.cat(tensors_gather, dim=0)
     return output

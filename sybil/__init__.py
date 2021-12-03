@@ -17,8 +17,8 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-from sybil.core.model import Sybil
-from sybil.core.serie import Serie
+from sybil.model import Sybil
+from sybil.serie import Serie
 
 
 __all__ = ["Sybil", "Serie"]

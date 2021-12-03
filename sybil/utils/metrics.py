@@ -1,5 +1,14 @@
 from collections import OrderedDict
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, precision_recall_curve, auc, average_precision_score
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    precision_recall_curve,
+    auc,
+    average_precision_score,
+)
 import numpy as np
 from lifelines.utils.btree import _BTree
 from lifelines import KaplanMeierFitter
@@ -8,64 +17,86 @@ import warnings
 EPSILON = 1e-6
 BINARY_CLASSIF_THRESHOLD = 0.5
 
+
 def get_classification_metrics(logging_dict, args):
     stats_dict = OrderedDict()
 
-    golds = np.array(logging_dict['golds']).reshape(-1)
-    probs = np.array(logging_dict['probs'])
+    golds = np.array(logging_dict["golds"]).reshape(-1)
+    probs = np.array(logging_dict["probs"])
     preds = probs.argmax(axis=-1).reshape(-1)
-    probs = probs.reshape( (-1, probs.shape[-1]))
+    probs = probs.reshape((-1, probs.shape[-1]))
 
-    stats_dict['accuracy'] = accuracy_score(y_true=golds, y_pred=preds)
+    stats_dict["accuracy"] = accuracy_score(y_true=golds, y_pred=preds)
 
-    if (args.num_classes == 2) and not (np.unique(golds)[-1] > 1 or np.unique(preds)[-1] > 1):
-        stats_dict['precision'] = precision_score(y_true=golds, y_pred=preds)
-        stats_dict['recall'] = recall_score(y_true=golds, y_pred=preds)
-        stats_dict['f1'] = f1_score(y_true=golds, y_pred=preds)
+    if (args.num_classes == 2) and not (
+        np.unique(golds)[-1] > 1 or np.unique(preds)[-1] > 1
+    ):
+        stats_dict["precision"] = precision_score(y_true=golds, y_pred=preds)
+        stats_dict["recall"] = recall_score(y_true=golds, y_pred=preds)
+        stats_dict["f1"] = f1_score(y_true=golds, y_pred=preds)
         num_pos = golds.sum()
         if num_pos > 0 and num_pos < len(golds):
-            stats_dict['auc'] = roc_auc_score(golds, probs[:,-1], average='samples')
-            stats_dict['ap_score'] = average_precision_score(golds, probs[:,-1], average='samples')
-            precision, recall, _ = precision_recall_curve(golds, probs[:,-1])
-            stats_dict['prauc'] = auc(recall, precision)
+            stats_dict["auc"] = roc_auc_score(golds, probs[:, -1], average="samples")
+            stats_dict["ap_score"] = average_precision_score(
+                golds, probs[:, -1], average="samples"
+            )
+            precision, recall, _ = precision_recall_curve(golds, probs[:, -1])
+            stats_dict["prauc"] = auc(recall, precision)
 
     return stats_dict
+
 
 def get_survival_metrics(logging_dict, args):
     stats_dict = {}
 
-    censor_times, probs, golds = logging_dict['censors'], logging_dict['probs'], logging_dict['golds']
+    censor_times, probs, golds = (
+        logging_dict["censors"],
+        logging_dict["probs"],
+        logging_dict["golds"],
+    )
     for followup in range(args.max_followup):
         min_followup_if_neg = followup + 1
-        roc_auc, ap_score, pr_auc = compute_auc_at_followup(probs, censor_times, golds, followup)
-        stats_dict['{}_year_auc'.format(min_followup_if_neg)] = roc_auc
-        stats_dict['{}_year_apscore'.format(min_followup_if_neg)] = ap_score
-        stats_dict['{}_year_prauc'.format(min_followup_if_neg)] = pr_auc
+        roc_auc, ap_score, pr_auc = compute_auc_at_followup(
+            probs, censor_times, golds, followup
+        )
+        stats_dict["{}_year_auc".format(min_followup_if_neg)] = roc_auc
+        stats_dict["{}_year_apscore".format(min_followup_if_neg)] = ap_score
+        stats_dict["{}_year_prauc".format(min_followup_if_neg)] = pr_auc
 
     if np.array(golds).sum() > 0:
-        stats_dict['c_index'] = concordance_index(logging_dict['censors'], probs, golds, args.censoring_distribution)
+        stats_dict["c_index"] = concordance_index(
+            logging_dict["censors"], probs, golds, args.censoring_distribution
+        )
     else:
-        stats_dict['c_index'] = -1.
+        stats_dict["c_index"] = -1.0
     return stats_dict
 
 
 def get_risk_metrics(logging_dict, args):
     stats_dict = {}
-    censor_times, probs, golds = logging_dict['censors'], logging_dict['probs'], logging_dict['golds']
+    censor_times, probs, golds = (
+        logging_dict["censors"],
+        logging_dict["probs"],
+        logging_dict["golds"],
+    )
     for followup in range(args.max_followup):
         min_followup_if_neg = followup + 1
-        roc_auc, ap_score, pr_auc = compute_auc_at_followup(probs, censor_times, golds, followup, fup_lower_bound = 0)
-        stats_dict['{}_year_risk_auc'.format(min_followup_if_neg)] = roc_auc
-        stats_dict['{}_year_risk_apscore'.format(min_followup_if_neg)] = ap_score
-        stats_dict['{}_year_risk_prauc'.format(min_followup_if_neg)] = pr_auc
+        roc_auc, ap_score, pr_auc = compute_auc_at_followup(
+            probs, censor_times, golds, followup, fup_lower_bound=0
+        )
+        stats_dict["{}_year_risk_auc".format(min_followup_if_neg)] = roc_auc
+        stats_dict["{}_year_risk_apscore".format(min_followup_if_neg)] = ap_score
+        stats_dict["{}_year_risk_prauc".format(min_followup_if_neg)] = pr_auc
 
     return stats_dict
 
-def compute_auc_at_followup(probs, censor_times, golds, followup, fup_lower_bound = -1):
+
+def compute_auc_at_followup(probs, censor_times, golds, followup, fup_lower_bound=-1):
     golds, censor_times = golds.ravel(), censor_times.ravel()
     if len(probs.shape) == 3:
-        probs = probs.reshape(probs.shape[0]* probs.shape[1], probs.shape[2])
-    def include_exam_and_determine_label( prob_arr, censor_time, gold):
+        probs = probs.reshape(probs.shape[0] * probs.shape[1], probs.shape[2])
+
+    def include_exam_and_determine_label(prob_arr, censor_time, gold):
         valid_pos = gold and censor_time <= followup and censor_time > fup_lower_bound
         valid_neg = censor_time >= followup
         included, label = (valid_pos or valid_neg), valid_pos
@@ -79,21 +110,26 @@ def compute_auc_at_followup(probs, censor_times, golds, followup, fup_lower_boun
             golds_for_eval.append(label)
 
     try:
-        roc_auc = roc_auc_score(golds_for_eval, probs_for_eval, average='samples')
-        ap_score = average_precision_score(golds_for_eval, probs_for_eval, average='samples')
+        roc_auc = roc_auc_score(golds_for_eval, probs_for_eval, average="samples")
+        ap_score = average_precision_score(
+            golds_for_eval, probs_for_eval, average="samples"
+        )
         precision, recall, _ = precision_recall_curve(golds_for_eval, probs_for_eval)
         pr_auc = auc(recall, precision)
     except Exception as e:
         warnings.warn("Failed to calculate AUC because {}".format(e))
-        roc_auc = -1.
-        ap_score = -1.
-        pr_auc = -1.
+        roc_auc = -1.0
+        ap_score = -1.0
+        pr_auc = -1.0
     return roc_auc, ap_score, pr_auc
 
 
 def get_censoring_dist(train_dataset):
     _dataset = train_dataset.dataset
-    times, event_observed = [d['time_at_event'] for d in _dataset], [d['y'] for d in _dataset]
+    times, event_observed = (
+        [d["time_at_event"] for d in _dataset],
+        [d["y"] for d in _dataset],
+    )
     all_observed_times = set(times)
     kmf = KaplanMeierFitter()
     kmf.fit(times, event_observed)
@@ -101,7 +137,10 @@ def get_censoring_dist(train_dataset):
     censoring_dist = {str(time): kmf.predict(time) for time in all_observed_times}
     return censoring_dist
 
-def concordance_index(event_times, predicted_scores, event_observed=None, censoring_dist=None):
+
+def concordance_index(
+    event_times, predicted_scores, event_observed=None, censoring_dist=None
+):
     """
     ## Adapted from: https://raw.githubusercontent.com/CamDavidsonPilon/lifelines/master/lifelines/utils/concordance.py
     ## Modified to weight by ipcw (inverse probality of censor weight) to fit Uno's C-index
@@ -154,16 +193,25 @@ def concordance_index(event_times, predicted_scores, event_observed=None, censor
     event_times = np.array(event_times).ravel()
     predicted_scores = 1 - np.asarray(predicted_scores, dtype=float)
     if len(predicted_scores.shape) == 3:
-        predicted_scores = predicted_scores.reshape( [predicted_scores.shape[0] * predicted_scores.shape[1], predicted_scores.shape[2]])
+        predicted_scores = predicted_scores.reshape(
+            [
+                predicted_scores.shape[0] * predicted_scores.shape[1],
+                predicted_scores.shape[2],
+            ]
+        )
 
     if event_observed is None:
         event_observed = np.ones(event_times.shape[0], dtype=float)
     else:
         event_observed = np.asarray(event_observed, dtype=float).ravel()
         if event_observed.shape != event_times.shape:
-            raise ValueError("Observed events must be 1-dimensional of same length as event times")
+            raise ValueError(
+                "Observed events must be 1-dimensional of same length as event times"
+            )
 
-    num_correct, num_tied, num_pairs = _concordance_summary_statistics(event_times, predicted_scores, event_observed, censoring_dist)
+    num_correct, num_tied, num_pairs = _concordance_summary_statistics(
+        event_times, predicted_scores, event_observed, censoring_dist
+    )
 
     return _concordance_ratio(num_correct, num_tied, num_pairs)
 
@@ -220,7 +268,6 @@ def _concordance_summary_statistics(
 
     observed_times = set(event_times)
 
-
     died_mask = event_observed.astype(bool)
     # TODO: is event_times already sorted? That would be nice...
     died_truth = event_times[died_mask]
@@ -250,11 +297,23 @@ def _concordance_summary_statistics(
         has_more_censored = censored_ix < len(censored_truth)
         has_more_died = died_ix < len(died_truth)
         # Should we look at some censored indices next, or died indices?
-        if has_more_censored and (not has_more_died or died_truth[died_ix] > censored_truth[censored_ix]):
-            pairs, correct, tied, next_ix, weight = _handle_pairs(censored_truth, censored_pred, censored_ix, times_to_compare, censoring_dist)
+        if has_more_censored and (
+            not has_more_died or died_truth[died_ix] > censored_truth[censored_ix]
+        ):
+            pairs, correct, tied, next_ix, weight = _handle_pairs(
+                censored_truth,
+                censored_pred,
+                censored_ix,
+                times_to_compare,
+                censoring_dist,
+            )
             censored_ix = next_ix
-        elif has_more_died and (not has_more_censored or died_truth[died_ix] <= censored_truth[censored_ix]):
-            pairs, correct, tied, next_ix, weight = _handle_pairs(died_truth, died_pred, died_ix, times_to_compare, censoring_dist)
+        elif has_more_died and (
+            not has_more_censored or died_truth[died_ix] <= censored_truth[censored_ix]
+        ):
+            pairs, correct, tied, next_ix, weight = _handle_pairs(
+                died_truth, died_pred, died_ix, times_to_compare, censoring_dist
+            )
             for pred in died_pred[died_ix:next_ix]:
                 for time in observed_times:
                     times_to_compare[time].insert(pred[int(time)])
@@ -283,7 +342,7 @@ def _handle_pairs(truth, pred, first_ix, times_to_compare, censoring_dist):
     """
     next_ix = first_ix
     truth_time = truth[first_ix]
-    weight = 1./(censoring_dist[str(int(truth_time))]**2)
+    weight = 1.0 / (censoring_dist[str(int(truth_time))] ** 2)
     while next_ix < len(truth) and truth[next_ix] == truth[first_ix]:
         next_ix += 1
     pairs = len(times_to_compare[truth_time]) * (next_ix - first_ix)

@@ -2,7 +2,7 @@ import math
 from typing import TypeVar, Optional, Iterator, Sequence
 
 import torch
-from torch.utils.data import Sampler, Dataset
+from torch.utils.data import Dataset
 import torch.distributed as dist
 
 
