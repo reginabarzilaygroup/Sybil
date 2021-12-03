@@ -1,9 +1,8 @@
 import math 
-from sandstone.models.factory import RegisterModel
 from tqdm import tqdm 
 import pickle
 
-class RiskModel(object):
+class PLCOm2012(object):
     def __init__(self, args):
         self.args = args
 
@@ -26,19 +25,6 @@ class RiskModel(object):
         predictions_dict = [{k:v for k,v in d.items() if k in self.save_keys } for d in data]
         predictions_filename = "{}.{}.predictions".format(self.args.results_path, self.save_prefix)
         pickle.dump(predictions_dict, open(predictions_filename,'wb'))
-
-    @property
-    def input_coef(self):
-        pass
-
-    @property
-    def input_transformers(self):
-        pass
-
-@RegisterModel('plcom2012')
-class PLCOm2012(RiskModel):
-    def __init__(self, args):
-        super(PLCOm2012, self).__init__(args)
 
     def model(self, x):
         return 1/(1+math.exp(-x))
