@@ -1,5 +1,5 @@
 from typing import NamedTuple, Iterable, Union, Optional
-from sybil.core.serie import Serie
+from sybil.serie import Serie
 
 
 class Prediction(NamedTuple):
@@ -35,7 +35,7 @@ class Sybil:
         Returns
         -------
         Prediction
-            Output prediction. See details for :class:`~sybil.core.model.Prediction`".
+            Output prediction. See details for :class:`~sybil.model.Prediction`".
 
         """
         pass
@@ -51,7 +51,7 @@ class Sybil:
         Returns
         -------
         Evaluation
-            Output evaluation. See details for :class:`~sybil.core.model.Evaluation`".
+            Output evaluation. See details for :class:`~sybil.model.Evaluation`".
 
         """
         pass

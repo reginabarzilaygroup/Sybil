@@ -1,5 +1,8 @@
 from sandstone.augmentations.basic import ToTensor
-NON_AUG_ERR = "Augmentation {} not in AUGMENTATION_REGISTRY! Available augmentations are {}"
+
+NON_AUG_ERR = (
+    "Augmentation {} not in AUGMENTATION_REGISTRY! Available augmentations are {}"
+)
 
 IMAGE_AUGMENTATION_REGISTRY = {}
 TENSOR_AUGMENTATION_REGISTRY = {}
@@ -28,19 +31,25 @@ def RegisterImageAugmentation(name):
 
 
 def get_augmentations(image_augmentations, tensor_augmentations, args):
-    augmentations =  []
-    augmentations = _add_augmentations(augmentations, image_augmentations,
-                                     IMAGE_AUGMENTATION_REGISTRY, args)
+    augmentations = []
+    augmentations = _add_augmentations(
+        augmentations, image_augmentations, IMAGE_AUGMENTATION_REGISTRY, args
+    )
     augmentations.append(ToTensor())
-    augmentations = _add_augmentations(augmentations, tensor_augmentations,
-                                     TENSOR_AUGMENTATION_REGISTRY, args)
+    augmentations = _add_augmentations(
+        augmentations, tensor_augmentations, TENSOR_AUGMENTATION_REGISTRY, args
+    )
     return augmentations
+
 
 def get_tensor_augmentation(augmentation_name):
     if augmentation_name not in TENSOR_AUGMENTATION_REGISTRY:
-        raise Exception(NON_AUG_ERR.format(augmentation_name, TENSOR_AUGMENTATION_REGISTRY.keys()))
+        raise Exception(
+            NON_AUG_ERR.format(augmentation_name, TENSOR_AUGMENTATION_REGISTRY.keys())
+        )
 
     return TENSOR_AUGMENTATION_REGISTRY[augmentation_name]
+
 
 def _add_augmentations(augmentations, new_augmentations, registry, args):
     for trans in new_augmentations:

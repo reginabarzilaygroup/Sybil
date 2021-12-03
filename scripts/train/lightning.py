@@ -3,9 +3,9 @@ import torch
 from collections import OrderedDict
 from argparse import Namespace
 import pickle
-import sybil.core.utils.losses as losses
-import sybil.core.utils.metrics as metrics
-import sybil.core.models as models
+import sybil.utils.losses as losses
+import sybil.utils.metrics as metrics
+import sybil.models as models
 
 
 class SybilLightning(pl.LightningModule):
