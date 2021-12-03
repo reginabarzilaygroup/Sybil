@@ -138,7 +138,7 @@ if __name__ == '__main__':
             else:
                 exam_dict['image_series'] = {series_id: img_series_dict}
                 json_dataset[pt_idx]['accessions'].append(exam_dict)
-                
+        
         else:
             exam_dict['image_series'] = {series_id: img_series_dict}
             if pid in test_google_pids:

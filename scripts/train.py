@@ -1,11 +1,15 @@
-import pytorch_lightning as pl
-import torch
 from collections import OrderedDict
 from argparse import Namespace
 import pickle
+import os
+
+import pytorch_lightning as pl
+import torch
+
 import sybil.utils.losses as losses
 import sybil.utils.metrics as metrics
 import sybil.models as models
+from sybil.parsing import parse_args
 
 
 class SybilLightning(pl.LightningModule):
@@ -113,7 +117,8 @@ class SybilLightning(pl.LightningModule):
         if len(outputs) == 0:
             return
         outputs = gather_step_outputs(outputs)
-        # loss already logged in progress_bar_dict (get_progress_bar_dict()), and logging twice creates issue
+        # loss already logged in progress_bar_dict (get_progress_bar_dict()),
+        # and logging twice creates issue
         del outputs["loss"]
         epoch_metrics = compute_epoch_metrics(
             outputs, self.args, self.device, key_prefix="train_"
@@ -146,7 +151,7 @@ class SybilLightning(pl.LightningModule):
 
         self.log_dict(epoch_metrics, prog_bar=True, logger=True)
 
-        ## Dump metrics for use by dispatcher
+        # Dump metrics for use by dispatcher
         metrics_dict = {
             k[len(self.save_prefix) :]: v.mean().item()
             for k, v in outputs.items()
@@ -327,9 +332,43 @@ def compute_epoch_metrics(result_dict, args, device, key_prefix=""):
 
 
 def train(args):
+    if not args.turn_off_checkpointing:
+        checkpoint_callback = pl.callbacks.ModelCheckpoint(
+            dirpath=snapshot_dir,
+            save_top_k=1,
+            verbose=True,
+            monitor="val_{}".format(args.tuning_metric)
+            if args.tuning_metric is not None
+            else None,
+            save_last=True,
+            mode="min"
+            if args.tuning_metric is not None and "loss" in args.tuning_metric
+            else "max",
+        )
+        args.callbacks = [checkpoint_callback]
+    trainer = pl.Trainer.from_argparse_args(args)
+    args.num_nodes = trainer.num_nodes
+    args.num_processes = trainer.num_processes
+    args.world_size = args.num_nodes * args.num_processes
+    args.global_rank = trainer.global_rank
+    args.local_rank = trainer.local_rank
+
+    comet_key = os.environ.get("COMET_API_KEY")
+    if comet_key is not None:
+        tb_logger = pl.loggers.CometLogger(
+            api_key=comet_key,
+            project_name=args.project_name,
+            experiment_name=result_path_stem,
+            workspace=args.workspace,
+        )
+    else:
+        tb_logger = pl.loggers.CometLogger()
+    trainer.logger = tb_logger
+
     module = SybilLightning(args)
+    trainer.fit(module)
+
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     train(args)
-
