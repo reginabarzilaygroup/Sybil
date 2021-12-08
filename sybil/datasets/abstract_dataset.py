@@ -138,17 +138,8 @@ class Abstract_Dataset(data.Dataset):
     def __getitem__(self, index):
         sample = self.dataset[index]
         try:
-            if self.args.hiddens_stored_as_individual_numpy_arrays:
-                x, mask = self.input_loader.get_image(sample['paths'], sample['additionals'], sample)
-
-            elif self.args.multi_image:
-                x, mask = self.input_loader.get_images(sample['paths'], sample['additionals'], sample)
-
-            else:
-                if ( ('additional' in sample) and (sample['additional'] is None) ) or ('additional' not in sample):
-                    sample['additional'] = {}
-                x, mask = self.input_loader.get_image(sample['path'], sample['additional'], sample)
-
+            x, mask = self.input_loader.get_images(sample['paths'], sample['additionals'], sample)
+            
             item = {
                 'x': x,
                 'y': sample['y']
@@ -171,8 +162,7 @@ class Abstract_Dataset(data.Dataset):
 
             return item
         except Exception:
-            path_key =  'paths' if  self.args.multi_image  else 'path'
-            warnings.warn(LOAD_FAIL_MSG.format(sample[path_key], traceback.print_exc()))  
+            warnings.warn(LOAD_FAIL_MSG.format(sample['paths'], traceback.print_exc()))  
     
     def get_ct_annotations(self, sample):
         # correct empty lists of annotations

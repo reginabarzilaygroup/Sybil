@@ -77,7 +77,7 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
             for exam_dict in exams:
                 abnormalities_dict = exam_dict['abnormalities']
 
-                if self.args.use_only_thin_cuts_for_ct and split_group in ['train', 'dev']:
+                if self.args.use_only_thin_cuts and split_group in ['train', 'dev']:
                     thinnest_series_id = self.get_thinnest_cut(exam_dict)
 
                 elif split == 'test' and self.args.assign_splits:
@@ -100,7 +100,7 @@ class NLST_Survival_Dataset(Abstract_CT_Dataset):
                     if self.skip_sample(series_dict, pt_metadata):
                         continue
 
-                    if self.args.use_only_thin_cuts_for_ct and (not series_id == thinnest_series_id):
+                    if self.args.use_only_thin_cuts and (not series_id == thinnest_series_id):
                         continue
 
                     sample = self.get_volume_dict(series_id, series_dict, exam_dict, pt_metadata, pid, split)
