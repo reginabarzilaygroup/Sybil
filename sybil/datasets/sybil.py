@@ -31,7 +31,7 @@ class SybilDataset(data.Dataset):
         
         self.split_group = split_group
         self.args = args
-        self._max_sequence_length = args.max_sequence_length # number of slices in each volume
+        self._max_sequence_length = args.num_images # number of slices in each volume
         self._max_followup = args.max_followup
 
         try:
@@ -145,7 +145,7 @@ class SybilDataset(data.Dataset):
             
             # put in right order and fit to max length
             paths = order_slices(mrn_row['paths'], mrn_row['slice_locations'])
-            paths = fit_to_length(paths, self.PAD_PATH, self._max_sequence_length)
+            paths = fit_to_length(paths, self.PAD_PATH, self.num_images)
             # obtain labels
             labels = series_object.get_processed_label(self._max_followup)
 
