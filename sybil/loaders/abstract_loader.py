@@ -1,21 +1,25 @@
 import torch
-import pdb
-import cv2
 import os
 import sys
 import os.path
 import warnings
-from sandstone.utils.generic import md5
-from sandstone.utils.region_annotation import get_scaled_annotation_mask
-from sandstone.augmentations.basic import ComposeAug
+from sybil.datasets.utils import get_scaled_annotation_mask
+from sybil.augmentations import ComposeAug
 import numpy as np
 from abc import ABCMeta, abstractmethod
+import hashlib
 
 CACHED_FILES_EXT = '.png'
 DEFAULT_CACHE_DIR = 'default/'
 
 CORUPTED_FILE_ERR = 'WARNING! Error processing file from cache - removed file from cache. Error: {}'
 
+
+def md5(key):
+    """
+    returns a hashed with md5 string of the key
+    """
+    return hashlib.md5(key.encode()).hexdigest()
 
 def split_augmentations_by_cache(augmentations):
     '''
@@ -150,11 +154,6 @@ class abstract_loader():
     def apply_augmentations(self):
         return True
 
-    def permute_single_image(self, image):
-        if self.args.input_loader_name == "color_image_loader":
-            return np.transpose(image, [2, 0, 1])
-        return image
-
 
     def get_image(self, path, additional, sample):
         '''
@@ -163,7 +162,7 @@ class abstract_loader():
         and saved to cache if not.
         '''
         image_path = self.configure_path(path, additional, sample)
-        mask = get_scaled_annotation_mask(additional, self.args) if (self.args.use_region_annotations and not self.args.load_annotations_from_hidden) else None
+        mask = get_scaled_annotation_mask(additional, self.args) if self.args.use_annotations else None
 
         if not self.use_cache:
             image = self.load_input(image_path, additional)
@@ -201,7 +200,6 @@ class abstract_loader():
             image, mask = apply_augmentations_and_cache(image, mask, additional, image_path, all_augmentations,
                                              self.cache, cache_full_size=self.args.cache_full_img, base_key=key)
 
-        image = self.permute_single_image(image)
         return image, mask
 
 
@@ -220,20 +218,12 @@ class abstract_loader():
             if self.args.fix_seed_for_multi_image_augmentations and ('seed' not in additionals[i]):
                 additionals[i]['seed'] = sample_fixed_seed
 
-        # back-compatible support for when single hidden represents multi-image input
-        if self.args.use_precomputed_hiddens and self.args.collate_multi_image_hidden_paths:
-                path = '\t'.join(paths)
-                return self.get_image(path, additionals, sample)
-
         # get images for multi image input
         images_masks = [self.get_image(path, additional, sample) for path, additional in zip(paths, additionals)]
         images, masks = [i[0] for i in images_masks], [i[1] for i in images_masks]
-        # immediately return without image concat if using hidden
-        if self.args.use_precomputed_hiddens:
-            return torch.tensor(images)
-        
+
         images = self.reshape_images(images)
-        masks = self.reshape_images(masks) if (self.args.use_region_annotations and not self.args.load_annotations_from_hidden) else None
+        masks = self.reshape_images(masks) if self.args.use_annotations else None
 
         return images, masks
     

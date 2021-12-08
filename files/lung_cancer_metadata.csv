@@ -1,0 +1,2 @@
+patient_id,exam_id,age,"race","ethnicity","gender","education_level","weight","height",binary_family_history,copd,is_current_smoker,smoking_duration,smoking_intensity,years_since_quit_smoking
+,,,,,,,,,,,,,,

@@ -1,0 +1,3 @@
+patient_id," exam_id"," series_id"," exam_date"," ever_has_future_cancer"," years_to_cancer"," years_to_last_negative_followup",file_path,slice_position,split
+,,,,,,,,,
+,,,,,,,,,

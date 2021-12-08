@@ -141,17 +141,6 @@ def get_eval_dataset_loader(args, eval_data, batch_size, shuffle):
     return data_loader
 
 
-def md5(key):
-    """
-    returns a hashed with md5 string of the key
-    """
-    return hashlib.md5(key.encode()).hexdigest()
-
-
-def log(text, args):
-    print(text)
-
-
 @torch.no_grad()
 def concat_all_gather(tensor):
     """

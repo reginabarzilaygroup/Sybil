@@ -1,6 +1,7 @@
 from sybil.loaders.abstract_loader import abstract_loader
 import cv2
 import torch
+import pydicom
 
 LOADING_ERROR = "LOADING ERROR! {}"
 
@@ -20,15 +21,16 @@ class OpenCVLoader(abstract_loader):
         return ".png"
 
 
-class TensorLoader(abstract_loader):
+class DicomLoader(abstract_loader):
     def configure_path(self, path, additional, sample):
         return path
 
     def load_input(self, path, additional):
         try:
-            arr = torch.load(path)
+            dcm = pydicom.dcmread(path)
+            arr = dcm.pixel_array
         except Exception:
-            raise Exception(LOADING_ERROR.format("COULD NOT LOAD TENSOR."))
+            raise Exception(LOADING_ERROR.format("COULD NOT LOAD DICOM."))
         return arr
 
     @property

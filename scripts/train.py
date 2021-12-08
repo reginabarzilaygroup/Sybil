@@ -6,6 +6,7 @@ import os
 import pytorch_lightning as pl
 import torch
 
+from utils import get_dataset
 import sybil.utils.losses as losses
 import sybil.utils.metrics as metrics
 import sybil.models as models
@@ -365,8 +366,10 @@ def train(args):
         tb_logger = pl.loggers.CometLogger()
     trainer.logger = tb_logger
 
+    train_dataset = get_dataset(args.dataset_name, 'train', args)
+    dev_dataset = get_dataset(args.dataset_name, 'dev', args)
     module = SybilLightning(args)
-    trainer.fit(module)
+    trainer.fit(module, train_dataset, dev_dataset)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,10 @@
 import numpy as np 
 import math 
+# Error Messages
+METAFILE_NOTFOUND_ERR = "Metadata file {} could not be parsed! Exception: {}!"
+LOAD_FAIL_MSG = "Failed to load image: {}\nException: {}"
+# Constants
+IMG_PAD_PATH = 'datafiles/pad.tif'
 
 def order_slices( img_paths, slice_locations):
     sorted_ids = np.argsort(slice_locations)
@@ -7,48 +12,34 @@ def order_slices( img_paths, slice_locations):
     sorted_slice_locs = np.sort(slice_locations).tolist()
     return sorted_img_paths, sorted_slice_locs
 
+def assign_splits(meta, args):
+    for idx in range(len(meta)):
+        meta[idx]['split'] = np.random.choice(['train','dev','test'], p = args.split_probs) 
 
-def fit_to_length(arr, pad_token, max_length, truncate_method = 'evenly', pad_method = 'evenly', start_index = 0):
+def fit_to_length(arr, pad_token, max_length):
         '''
         Fits arr to max_length by either truncating arr (remove excess from both tails) 
         or padding (on both sides) arr with pad_token.
         '''
-        if truncate_method == 'none' and pad_method == 'none':
-            return arr 
-            
         if len(arr) > max_length:
-            arr = truncate(arr, max_length, truncate_method, start_index)
+            arr = truncate(arr, max_length)
 
         elif len(arr) < max_length:
-            arr = pad(arr, pad_token, max_length, pad_method)
+            arr = pad(arr, pad_token, max_length)
         return arr
 
-def truncate(arr, max_length, method, start_index = 0):
-    if method == 'two_tailed':
-        start_idx = (len(arr) - max_length + 1) // 2
-        arr = arr[start_idx : start_idx + max_length]
-    if method == 'evenly':
-        include_ids = np.round(np.linspace(0, len(arr) - 1, max_length)).astype(int)
-        arr = [elt for idx, elt in enumerate(arr) if idx in include_ids]
-    if method == 'from_start_index':
-        arr = arr[start_index: (start_index+max_length)]
+def truncate(arr, max_length):    
+    start_idx = (len(arr) - max_length + 1) // 2
+    arr = arr[start_idx : start_idx + max_length]
     return arr
 
-def pad(arr, pad_token, max_length, method):
+def pad(arr, pad_token, max_length):
     num_pad_tokens = max_length - len(arr)
-    if method == 'two_tailed':
-        arr = [pad_token] * ((num_pad_tokens + 1) // 2) + arr + [pad_token] * ((num_pad_tokens) // 2)
-    if method =='right_tail':
-        arr = arr + [pad_token]*(num_pad_tokens)
-    if method == 'left_tail':
-        arr = [pad_token]*(num_pad_tokens) + arr
-    if method == 'evenly':
-        pad_ids = np.round(np.linspace(0, max_length - 1, num_pad_tokens)).astype(int)
-        for idx in pad_ids:
-            arr.insert(idx, pad_token)
-
+    pad_ids = np.round(np.linspace(0, max_length - 1, num_pad_tokens)).astype(int)
+    for idx in pad_ids:
+        arr.insert(idx, pad_token)
     return arr
-    
+
 def get_scaled_annotation_mask(additional, args, scale_annotation=True):
     '''
     Construct bounding box masks for annotations
@@ -100,3 +91,19 @@ def get_scaled_annotation_mask(additional, args, scale_annotation=True):
     if scale_annotation:
         mask /= mask.sum()
     return mask
+
+def get_scaled_annotation_area(sample, args):
+    '''
+    no_box = [{'width': 0, 'height': 0}]
+    if sample['series'] in self.annotations_metadata:
+        # total area of bounding boxes in 
+        areas_per_slice = [ [ box['width']*box['height'] for box in self.annotations_metadata[ sample['series'] ].get( os.path.splitext(os.path.basename(path))[0], no_box ) ] for path in sample['paths'] ]
+        return np.array( [ np.sum(areas) for areas in areas_per_slice] )
+    else:
+        return np.array([ 0  for _ in sample['paths'] ])
+    '''
+    areas = []
+    for additional in sample['additionals'] :
+        mask = get_scaled_annotation_mask(additional, args, scale_annotation=False)
+        areas.append( mask.sum()/ ( mask.shape[0] * mask.shape[1] ) )
+    return np.array(areas)
