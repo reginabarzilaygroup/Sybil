@@ -36,7 +36,9 @@ class Abstract_augmentation(object):
     __metaclass__ = ABCMeta
 
     def __init__(self):
-        pass
+        self._trans_sep = '@' 
+        self._attr_sep = '#'
+        self.name = self.__str__().split('sybil.augmentations.')[-1].split(' ')[0].lower()
 
     @abstractmethod
     def __call__(self, img, mask=None, additional=None):
@@ -46,6 +48,23 @@ class Abstract_augmentation(object):
         random.seed(seed)
         np.random.seed(seed)
         torch.random.manual_seed(seed)
+
+    def cachable(self):
+        return self._is_cachable
+
+    def set_cachable(self, *keys):
+        '''
+        Sets the transformer as cachable
+        and sets the _caching_keys according to the input variables.
+        '''
+        self._is_cachable = True
+        name_str = '{}{}'.format(self._trans_sep, self.name)
+        keys_str = ''.join(self._attr_sep + str(k) for k in keys)
+        self._caching_keys = '{}{}'.format(name_str, keys_str)
+        return
+
+    def caching_keys(self):
+        return self._caching_keys
 
 class ComposeAug(Abstract_augmentation):
     """
@@ -130,9 +149,8 @@ class Normalize_Tensor_2d(Abstract_augmentation):
             torch.Tensor(channel_means), torch.Tensor(channel_stds)
         )
 
-        self.permute = args.input_loader_name in [
-            "numpy_image_loader",
-            "color_image_loader",
+        self.permute = args.img_file_type in [
+            "png",
         ]
 
     def __call__(self, img, mask=None, additional=None):
