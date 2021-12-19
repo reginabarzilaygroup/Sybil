@@ -16,7 +16,7 @@ def assign_splits(meta, args):
     for idx in range(len(meta)):
         meta[idx]['split'] = np.random.choice(['train','dev','test'], p = args.split_probs) 
 
-def fit_to_length(arr, pad_token, max_length):
+def fit_to_length(arr, max_length,  pad_token = IMG_PAD_PATH):
         '''
         Fits arr to max_length by either truncating arr (remove excess from both tails) 
         or padding (on both sides) arr with pad_token.
