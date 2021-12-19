@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
-from models.cumulative_probability_layer import Cumulative_Probability_Layer
-from models.pooling_layer import MultiAttentionPool
-from datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
+from sybil.models.cumulative_probability_layer import Cumulative_Probability_Layer
+from sybil.models.pooling_layer import MultiAttentionPool
+from sybil.datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
 
 class SybilNet(nn.Module):
     def __init__(self, args):
@@ -19,11 +19,11 @@ class SybilNet(nn.Module):
 
         self.relu = nn.ReLU(inplace=False)
         self.dropout = nn.Dropout(p=args.dropout)
-        self.fc = nn.Linear(args.hidden_dim, args.num_classes)
+        self.fc = nn.Linear(self.hidden_dim, args.num_classes)
         
-        self.prob_of_failure_layer = Cumulative_Probability_Layer(args.hidden_dim, args, max_followup=args.max_followup)
+        self.prob_of_failure_layer = Cumulative_Probability_Layer(self.hidden_dim, args, max_followup=args.max_followup)
         
-    def forward(self, x):
+    def forward(self, x, batch):
         output = {}
         x = self.image_encoder(x)
         pool_output = self.aggregate_and_classify(x)
