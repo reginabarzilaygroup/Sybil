@@ -186,11 +186,6 @@ class SybilDataset(data.Dataset):
         statement += "\n" + "Censor Times: {}".format( Counter([d['time_at_event'] for d in dataset]))
         return statement
 
-    @staticmethod
-    def set_args(args):
-        """Sets any args particular to the dataset."""
-        pass
-
     def __len__(self):
         return len(self.dataset)
 
