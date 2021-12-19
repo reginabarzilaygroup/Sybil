@@ -4,7 +4,7 @@ import math
 METAFILE_NOTFOUND_ERR = "Metadata file {} could not be parsed! Exception: {}!"
 LOAD_FAIL_MSG = "Failed to load image: {}\nException: {}"
 # Constants
-IMG_PAD_PATH = 'datafiles/pad.tif'
+IMG_PAD_PATH = 'files/pad.tif'
 
 def order_slices( img_paths, slice_locations):
     sorted_ids = np.argsort(slice_locations)
