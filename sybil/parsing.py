@@ -151,21 +151,29 @@ def parse_args(args_strings=None):
         help="width and height of image in pixels. [default: [256,256]",
     )
     parser.add_argument(
+        "--num_chan",
+        type=int,
+        default=3,
+        help="number of channels for input image"
+    )
+    parser.add_argument(
         "--img_mean",
         type=float,
+        nargs='+',
         default=[128.1722],
         help="mean of image per channel"
     )
     parser.add_argument(
         "--img_std",
         type=float,
+        nargs='+',
         default=[87.1849],
         help="standard deviation  of image per channel"
     )
     parser.add_argument(
         "--img_dir",
         type=str,
-        default="/home/administrator/Mounts/Isilon/pngs16",
+        default="/data/rsg/mammogram/NLST/nlst-ct-png",
         help="dir of images. Note, image path in dataset jsons should stem from here",
     )
     parser.add_argument(
@@ -179,6 +187,12 @@ def parse_args(args_strings=None):
         type=str,
         default="/Mounts/rbg-storage1/datasets/NLST/full_nlst_google.json",
         help="path to dataset file either as json or csv.",
+    )
+    parser.add_argument(
+        "--num_classes",
+        type=int,
+        default=6,
+        help="Number of classes to predict"
     )
 
     # Alternative training/testing schemes
@@ -526,7 +540,7 @@ def parse_args(args_strings=None):
     if (isinstance(args.gpus, str) and len(args.gpus.split(",")) > 1) or (
         isinstance(args.gpus, int) and args.gpus > 1
     ):
-        args.distributed_backend = "ddp"
+        args.strategy = "ddp"
         args.replace_sampler_ddp = False
 
     args.unix_username = pwd.getpwuid(os.getuid())[0]
