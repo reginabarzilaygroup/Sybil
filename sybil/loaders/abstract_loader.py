@@ -230,13 +230,6 @@ class abstract_loader():
     def reshape_images(self, images):
         images = [im.unsqueeze(0) for im in images]
         images = torch.cat(images, dim=0)
-        if self.args.load_IRS_as_npy:
-            # permute from H,W,T to C,T,H,W
-            images = images.permute(0,3,1,2)
-        elif self.args.load_img_as_npz or self.args.input_loader_name == 'dicom_loader':
-            # permute images from (T,H,W,C) to (C,T,H,W)
-            images = images.permute(3,0,1,2)
-        else:
-            # Convert from (T, C, H, W) to (C, T, H, W)
-            images = images.permute(1, 0, 2, 3)
+        # Convert from (T, C, H, W) to (C, T, H, W)
+        images = images.permute(1, 0, 2, 3)
         return images
