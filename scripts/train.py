@@ -338,7 +338,7 @@ def compute_epoch_metrics(result_dict, args, device, key_prefix=""):
 def train(args):
     if not args.turn_off_checkpointing:
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            dirpath=args.snapshot_dir,
+            dirpath=args.save_dir,
             save_top_k=1,
             verbose=True,
             monitor="val_{}".format(args.tuning_metric)
