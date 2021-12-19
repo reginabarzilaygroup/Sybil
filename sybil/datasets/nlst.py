@@ -8,7 +8,7 @@ from torch.utils import data
 from sybil.serie import Serie
 from sybil.augmentations import get_augmentations 
 from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader 
-from utils import fit_to_length, get_scaled_annotation_area, IMG_PAD_PATH, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
+from sybil.datasets.utils import fit_to_length, get_scaled_annotation_area, IMG_PAD_PATH, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
 
 from sybil.datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
 
