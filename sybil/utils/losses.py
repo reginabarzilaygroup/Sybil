@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 
 
-def get_cross_entropy_loss(model_output, batch, args):
+def get_cross_entropy_loss(model_output, batch, model, args):
     logging_dict, predictions = OrderedDict(), OrderedDict()
     logit = model_output["logit"]
     loss = F.cross_entropy(logit, batch["y"].long())
@@ -14,21 +14,21 @@ def get_cross_entropy_loss(model_output, batch, args):
     return loss, logging_dict, predictions
 
 
-def get_survival_loss(model_output, batch, args):
+def get_survival_loss(model_output, batch, model, args):
     logging_dict, predictions = OrderedDict(), OrderedDict()
     logit = model_output["logit"]
     y_seq, y_mask = batch["y_seq"], batch["y_mask"]
     loss = F.binary_cross_entropy_with_logits(
-        logit, y_seq.float(), weight=y_mask.float(), size_average=False
+        logit, y_seq.float(), weight=y_mask.float(), reduction='sum')
     ) / torch.sum(y_mask.float())
     logging_dict["survival_loss"] = loss.detach()
-    predictions["probs"] = F.sigmoid(logit).detach()
+    predictions["probs"] = torch.sigmoid(logit).detach()
     predictions["golds"] = batch["y"]
     predictions["censors"] = batch["time_at_event"]
     return loss, logging_dict, predictions
 
 
-def get_annotation_loss(model_output, batch, args):
+def get_annotation_loss(model_output, batch, model, args):
     total_loss, logging_dict, predictions = 0, OrderedDict(), OrderedDict()
 
     B, _, N, H, W, = model_output["activ"].shape

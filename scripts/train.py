@@ -81,8 +81,7 @@ class SybilLightning(pl.LightningModule):
         logging_dict["train_loss"] = loss.detach()
         self.log_dict(logging_dict, prog_bar=False, on_step=True, on_epoch=True)
         result["logs"] = logging_dict
-        if not self.args.instance_discrim:
-            self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
+        self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
         result.update(predictions_dict)
         # lightning expects 'loss' key in output dict. ow loss := None by default
         result["loss"] = loss
@@ -96,10 +95,9 @@ class SybilLightning(pl.LightningModule):
         logging_dict["val_loss"] = loss.detach()
         self.log_dict(logging_dict, prog_bar=True, sync_dist=True)
         result["logs"] = logging_dict
-        if not self.args.instance_discrim:
-            if self.args.strategy == "ddp":
-                predictions_dict = gather_predictions_dict(predictions_dict)
-            self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
+        if self.args.strategy == "ddp":
+            predictions_dict = gather_predictions_dict(predictions_dict)
+        self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
         result.update(predictions_dict)
         return result
 
@@ -111,9 +109,8 @@ class SybilLightning(pl.LightningModule):
         logging_dict["{}_loss".format(self.save_prefix)] = loss.detach()
         result["logs"] = logging_dict
 
-        if not self.args.instance_discrim:
-            if self.args.strategy == "ddp":
-                predictions_dict = gather_predictions_dict(predictions_dict)
+        if self.args.strategy == "ddp":
+            predictions_dict = gather_predictions_dict(predictions_dict)
 
         self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
         # TODO: save predictions
