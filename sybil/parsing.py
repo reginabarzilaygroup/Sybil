@@ -2,7 +2,6 @@ import argparse
 import torch
 import os
 import pwd
-from sandstone.datasets.factory import get_dataset_class
 from pytorch_lightning import Trainer
 
 EMPTY_NAME_ERR = 'Name of augmentation or one of its arguments cant be empty\n\
@@ -510,9 +509,6 @@ def parse_args(args_strings=None):
     ):
         args.distributed_backend = "ddp"
         args.replace_sampler_ddp = False
-
-    # Set args particular to dataset
-    get_dataset_class(args).set_args(args)
 
     args.unix_username = pwd.getpwuid(os.getuid())[0]
 
