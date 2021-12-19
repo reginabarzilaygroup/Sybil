@@ -6,7 +6,10 @@ import os
 import pytorch_lightning as pl
 import torch
 
-from utils import get_dataset
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
+from sybil.utils.helpers import get_dataset
 import sybil.utils.losses as losses
 import sybil.utils.metrics as metrics
 import sybil.models as models
