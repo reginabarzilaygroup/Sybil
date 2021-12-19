@@ -38,7 +38,7 @@ class MultiAttentionPool(nn.Module):
         output['maxpool_hidden'] = maxpool_out['hidden']
         
         multi_image_hidden = torch.cat( [ image_pool_out1['multi_image_hidden'], image_pool_out2['multi_image_hidden']], dim = -2 )
-        output['multi_image_hidden'] = self.multi_img_fc(multi_image_hidden.permute([0,2,1]).contiguous()).permute([0,2,1]).contiguous()
+        output['multi_image_hidden'] = self.multi_img_hidden_fc(multi_image_hidden.permute([0,2,1]).contiguous()).permute([0,2,1]).contiguous()
 
         hidden = torch.cat( [ volume_pool_out1['hidden'], volume_pool_out2['hidden'], output['maxpool_hidden']], dim = -1 )
         output['hidden'] = self.hidden_fc(hidden)
@@ -147,7 +147,7 @@ class Simple_AttentionPool_MultiImg(nn.Module):
     Pool to learn an attention over the slices and the volume
     '''
     def __init__(self, **kwargs):
-        super(Simple_AttentionPool_MultiImg, self).__init__(args, kwargs['num_chan'])
+        super(Simple_AttentionPool_MultiImg, self).__init__()
 
         self.attention_fc = nn.Linear(kwargs['num_chan'], 1)
         self.softmax = nn.Softmax(dim=-1)
