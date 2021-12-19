@@ -79,7 +79,7 @@ def ignore_None_collate(batch):
     return default_collate(batch)
 
 
-def get_train_dataset_loader(args, train_data, batch_size):
+def get_train_dataset_loader(args, train_data):
     """
         Given arg configuration, return appropriate torch.DataLoader
         for train_data and dev_data
@@ -88,7 +88,7 @@ def get_train_dataset_loader(args, train_data, batch_size):
         train_data_loader: iterator that returns batches
         dev_data_loader: iterator that returns batches
     """
-    if args.distributed_backend == "ddp":
+    if args.strategy == "ddp":
         sampler = DistributedWeightedSampler(
             train_data,
             weights=train_data.weights,
@@ -106,16 +106,16 @@ def get_train_dataset_loader(args, train_data, batch_size):
         num_workers=args.num_workers,
         sampler=sampler,
         pin_memory=True,
-        batch_size=batch_size,
+        batch_size=args.batch_size,
         collate_fn=ignore_None_collate,
     )
 
     return train_data_loader
 
 
-def get_eval_dataset_loader(args, eval_data, batch_size, shuffle):
+def get_eval_dataset_loader(args, eval_data, shuffle):
 
-    if args.distributed_backend == "ddp":
+    if args.strategy == "ddp":
         sampler = torch.utils.data.distributed.DistributedSampler(
             eval_data,
             shuffle=shuffle,
@@ -130,7 +130,7 @@ def get_eval_dataset_loader(args, eval_data, batch_size, shuffle):
         )
     data_loader = torch.utils.data.DataLoader(
         eval_data,
-        batch_size=batch_size,
+        batch_size=args.batch_size,
         num_workers=args.num_workers,
         collate_fn=ignore_None_collate,
         pin_memory=True,
