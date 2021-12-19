@@ -8,7 +8,7 @@ from torch.utils import data
 from sybil.serie import Serie
 from sybil.augmentations import get_augmentations 
 from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader 
-from sybil.datasets.utils import fit_to_length, get_scaled_annotation_area, IMG_PAD_PATH, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
+from utils import fit_to_length, get_scaled_annotation_area, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
 
 from sybil.datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
 
@@ -243,8 +243,8 @@ class NLST_Survival_Dataset(data.Dataset):
         if self.args.use_risk_factors:
             sample['risk_factors'] = self.get_risk_factors(pt_metadata, screen_timepoint, return_dict = False)
 
-        sample['paths'] =  fit_to_length(sorted_img_paths, IMG_PAD_PATH, self.args.num_images )
-        sample['slice_locations'] = fit_to_length(sorted_slice_locs, '<PAD>', self.args.num_images)
+        sample['paths'] =  fit_to_length(sorted_img_paths, self.args.num_images )
+        sample['slice_locations'] = fit_to_length(sorted_slice_locs, self.args.num_images, '<PAD>')
         
         if self.args.use_annotations: 
             sample = self.get_ct_annotations(sample)

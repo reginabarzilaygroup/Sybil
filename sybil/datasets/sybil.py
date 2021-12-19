@@ -145,7 +145,7 @@ class SybilDataset(data.Dataset):
             
             # put in right order and fit to max length
             paths = order_slices(mrn_row['paths'], mrn_row['slice_locations'])
-            paths = fit_to_length(paths, self.PAD_PATH, self.num_images)
+            paths = fit_to_length(paths, self.num_images)
             # obtain labels
             labels = series_object.get_processed_label(self._max_followup)
 
@@ -198,8 +198,6 @@ class SybilDataset(data.Dataset):
         sample = self.dataset[index]
         try:
             x, mask = self.input_loader.get_images(sample['paths'], sample['additionals'], sample)
-            
-            x = sample['series_object'].get_processed_volume()
             
             item = {
                 'x': x,
