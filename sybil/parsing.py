@@ -370,7 +370,6 @@ def parse_args(args_strings=None):
         default=0.25,
         help="Amount of dropout to apply on last hidden layer [default: 0.25]",
     )
-
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="optimizer to use [default: adam]"
     )
@@ -394,8 +393,14 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--patience",
         type=int,
-        default=10,
+        default=5,
         help="number of epochs without improvement on dev before halving learning rate and reloading best model [default: 5]",
+    )
+    parser.add_argument(
+        "--tuning_metric",
+        type=str,
+        default="c_index",
+        help="criterion based on which model is saved [default: c_index]",
     )
 
     # model
@@ -420,8 +425,19 @@ def parse_args(args_strings=None):
 
     # model checkpointing
     parser.add_argument(
-        "--save_dir", type=str, default="snapshot", help="where to dump the model"
+        "--turn_off_checkpointing", 
+        action="store_true", 
+        default=False,
+        help="do not save best model"
     )
+
+    parser.add_argument(
+        "--save_dir",
+        type=str,
+        default="snapshot",
+        help="where to dump the model"
+    )
+
     parser.add_argument(
         "--snapshot",
         type=str,
