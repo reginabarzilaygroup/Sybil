@@ -338,7 +338,7 @@ def compute_epoch_metrics(result_dict, args, device, key_prefix=""):
 def train(args):
     if not args.turn_off_checkpointing:
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            dirpath=snapshot_dir,
+            dirpath=args.snapshot_dir,
             save_top_k=1,
             verbose=True,
             monitor="val_{}".format(args.tuning_metric)
@@ -357,6 +357,8 @@ def train(args):
     args.global_rank = trainer.global_rank
     args.local_rank = trainer.local_rank
 
+    result_path_stem = args.results_path.split("/")[-1].split('.')[0]
+
     comet_key = os.environ.get("COMET_API_KEY")
     if comet_key is not None:
         tb_logger = pl.loggers.CometLogger(
@@ -369,8 +371,8 @@ def train(args):
         tb_logger = pl.loggers.CometLogger()
     trainer.logger = tb_logger
 
-    train_dataset = get_dataset(args.dataset_name, 'train', args)
-    dev_dataset = get_dataset(args.dataset_name, 'dev', args)
+    train_dataset = get_dataset(args.dataset, 'train', args)
+    dev_dataset = get_dataset(args.dataset, 'dev', args)
     module = SybilLightning(args)
     trainer.fit(module, train_dataset, dev_dataset)
 
