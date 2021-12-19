@@ -36,6 +36,7 @@ class Abstract_augmentation(object):
     __metaclass__ = ABCMeta
 
     def __init__(self):
+        self._is_cachable = False
         self._trans_sep = '@' 
         self._attr_sep = '#'
         self.name = self.__str__().split('sybil.augmentations.')[-1].split(' ')[0].lower()
