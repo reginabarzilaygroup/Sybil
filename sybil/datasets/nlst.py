@@ -8,7 +8,7 @@ from torch.utils import data
 from sybil.serie import Serie
 from sybil.augmentations import get_augmentations 
 from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader 
-from utils import fit_to_length, get_scaled_annotation_area, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
+from sybil.datasets.utils import fit_to_length, get_scaled_annotation_area, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
 
 from sybil.datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
 
@@ -383,11 +383,6 @@ class NLST_Survival_Dataset(data.Dataset):
         for idx in range(len(meta)):
             meta[idx]['split'] = institute_to_split[meta[idx]['pt_metadata']['cen'][0]]
     
-    @staticmethod
-    def set_args(args):
-        args.num_classes = 6
-        args.max_followup = 6
-        args.multi_image = True
 
     @property
     def METADATA_FILENAME(self):
@@ -435,6 +430,9 @@ class NLST_Survival_Dataset(data.Dataset):
         mean_dist = np.mean([k for k in annotation_dist.values() if k!=0])
         return '\nAnnotations: Dataset has {} annotated samples. Number of annotations per sample has the following distribution {}, with mean {} \n'.format(num_annotations, annotation_dist, mean_dist)
                                                         
+    def __len__(self):
+        return len(self.dataset)
+
     def __getitem__(self, index):
         sample = self.dataset[index]
         try:
@@ -464,8 +462,7 @@ class NLST_Survival_Dataset(data.Dataset):
  
             return item
         except Exception:
-            path_key =  'paths' if  self.args.multi_image  else 'path'
-            warnings.warn(LOAD_FAIL_MSG.format(sample[path_key], traceback.print_exc()))
+            warnings.warn(LOAD_FAIL_MSG.format(sample['paths'], traceback.print_exc()))
 
 
 class NLST_for_PLCO(NLST_Survival_Dataset):
@@ -505,11 +502,6 @@ class NLST_for_PLCO(NLST_Survival_Dataset):
             return {}
 
         return sample 
-
-    @staticmethod
-    def set_args(args):
-        args.multi_image = False
-        args.num_classes = 2
 
 
 class NLST_Risk_Factor_Task(NLST_Survival_Dataset):
