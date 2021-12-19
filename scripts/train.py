@@ -3,6 +3,8 @@ from argparse import Namespace
 import pickle
 import os
 
+import comet_ml
+
 import pytorch_lightning as pl
 import torch
 
@@ -12,7 +14,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from sybil.utils.helpers import get_dataset
 import sybil.utils.losses as losses
 import sybil.utils.metrics as metrics
-import sybil.models as models
+import sybil.utils.loading as loaders
+import sybil.models.sybil as model
 from sybil.parsing import parse_args
 
 
@@ -34,7 +37,7 @@ class SybilLightning(pl.LightningModule):
             args = Namespace(**args)
         self.args = args
         # TODO: use model_name to select model
-        self.model = models.SybilNet(args)
+        self.model = model.SybilNet(args)
         self.save_prefix = "default"
         self.save_hyperparameters()
 
@@ -94,7 +97,7 @@ class SybilLightning(pl.LightningModule):
         self.log_dict(logging_dict, prog_bar=True, sync_dist=True)
         result["logs"] = logging_dict
         if not self.args.instance_discrim:
-            if self.args.distributed_backend == "ddp":
+            if self.args.strategy == "ddp":
                 predictions_dict = gather_predictions_dict(predictions_dict)
             self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
         result.update(predictions_dict)
@@ -109,7 +112,7 @@ class SybilLightning(pl.LightningModule):
         result["logs"] = logging_dict
 
         if not self.args.instance_discrim:
-            if self.args.distributed_backend == "ddp":
+            if self.args.strategy == "ddp":
                 predictions_dict = gather_predictions_dict(predictions_dict)
 
         self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
@@ -371,8 +374,15 @@ def train(args):
         tb_logger = pl.loggers.CometLogger()
     trainer.logger = tb_logger
 
-    train_dataset = get_dataset(args.dataset, 'train', args)
-    dev_dataset = get_dataset(args.dataset, 'dev', args)
+    train_dataset = loaders.get_train_dataset_loader(
+            args,
+            get_dataset(args.dataset, 'train', args)
+            )
+    dev_dataset = loaders.get_eval_dataset_loader(
+            args,
+            get_dataset(args.dataset, 'dev', args),
+            False
+            )
     module = SybilLightning(args)
     trainer.fit(module, train_dataset, dev_dataset)
 
