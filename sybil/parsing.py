@@ -140,8 +140,8 @@ def parse_args(args_strings=None):
     # data
     parser.add_argument(
         "--dataset",
-        default="mnist",
-        help="Name of dataset from dataset factory to use [default: mnist]",
+        default="nlst",
+        help="Name of dataset from dataset factory to use [default: nlst]",
     )
     parser.add_argument(
         "--img_size",
@@ -151,10 +151,16 @@ def parse_args(args_strings=None):
         help="width and height of image in pixels. [default: [256,256]",
     )
     parser.add_argument(
-        "--get_dataset_stats",
-        action="store_true",
-        default=False,
-        help="Whether to compute the mean and std of the training images on the fly rather than using precomputed values",
+        "--img_mean",
+        type=float,
+        default=[128.1722],
+        help="mean of image per channel"
+    )
+    parser.add_argument(
+        "--img_std",
+        type=float,
+        default=[87.1849],
+        help="standard deviation  of image per channel"
     )
     parser.add_argument(
         "--img_dir",
@@ -163,10 +169,16 @@ def parse_args(args_strings=None):
         help="dir of images. Note, image path in dataset jsons should stem from here",
     )
     parser.add_argument(
-        "--metadata_dir",
+        "--img_file_type",
         type=str,
-        default="/home/administrator/Mounts/Isilon/metadata",
-        help="dir of metadata jsons.",
+        default="png",
+        help="type of image. one of [png, dicom]",
+    )
+    parser.add_argument(
+        "--dataset_file_path",
+        type=str,
+        default="/Mounts/rbg-storage1/datasets/NLST/full_nlst_google.json",
+        help="path to dataset file either as json or csv.",
     )
 
     # Alternative training/testing schemes
@@ -198,7 +210,10 @@ def parse_args(args_strings=None):
 
     # survival analysis setup
     parser.add_argument(
-        "--max_followup", type=int, default=5, help="Max followup to predict over"
+        "--max_followup", 
+        type=int,
+        default=6, 
+        help="Max followup to predict over"
     )
 
     # risk factors
@@ -219,7 +234,7 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--num_images",
         type=int,
-        default=1,
+        default=200,
         help="In multi image setting, the number of images per single sample.",
     )
     parser.add_argument(
@@ -227,18 +242,6 @@ def parse_args(args_strings=None):
         type=int,
         default=0,
         help="In multi image setting, the min number of images per single sample.",
-    )
-    parser.add_argument(
-        "--padding_method",
-        type=str,
-        default="evenly",
-        help="How to pad image series with black image. Default is evenly distrubted across slices to obtain num_images slices.",
-    )
-    parser.add_argument(
-        "--truncation_method",
-        type=str,
-        default="evenly",
-        help="How to select slices if image series has more slices than num_images.",
     )
     parser.add_argument(
         "--slice_thickness_filter",

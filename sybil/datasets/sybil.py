@@ -31,16 +31,16 @@ class SybilDataset(data.Dataset):
         
         self.split_group = split_group
         self.args = args
-        self._max_sequence_length = args.num_images # number of slices in each volume
+        self._num_images = args.num_images # number of slices in each volume
         self._max_followup = args.max_followup
 
         try:
-            self.dataset_dicts = self.parse_csv_dataset(args.metadata_file)
+            self.dataset_dicts = self.parse_csv_dataset(args.dataset_file_path)
         except Exception as e:
-            raise Exception(METAFILE_NOTFOUND_ERR.format(args.metadata_file, e))
+            raise Exception(METAFILE_NOTFOUND_ERR.format(args.dataset_file_path, e))
 
         augmentations = get_augmentations(split_group, args)
-        if args.file_type == 'dicom':
+        if args.img_file_type == 'dicom':
             self.input_loader = DicomLoader(args.cache_path, augmentations, args)  
         else:
             self.input_loader = OpenCVLoader(args.cache_path, augmentations, args)
@@ -49,7 +49,7 @@ class SybilDataset(data.Dataset):
         if len(self.dataset) == 0:
             return
         
-        print(self.get_summary_statement(self.dataset, split_group), args)
+        print(self.get_summary_statement(self.dataset, split_group))
         
         dist_key = 'y'
         label_dist = [d[dist_key] for d in self.dataset]
@@ -59,8 +59,8 @@ class SybilDataset(data.Dataset):
             label: weight_per_label/count for label, count in label_counts.items()
             }
         
-        print("Class counts are: {}".format(label_counts), args)
-        print("Label weights are {}".format(label_weights), args)
+        print("Class counts are: {}".format(label_counts))
+        print("Label weights are {}".format(label_weights))
         self.weights = [ label_weights[d[dist_key]] for d in self.dataset]
 
 

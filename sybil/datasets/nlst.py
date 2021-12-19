@@ -20,7 +20,7 @@ CORRUPTED_PATHS = '/Mounts/rbg-storage1/datasets/NLST/corrupted_img_paths.pkl'
 
 CT_ITEM_KEYS = [
     'pid', 'exam', 'series', 'y_seq', 'y_mask', 'time_at_event',
-    'cancer_location', 'cancer_laterality', 
+    'cancer_laterality', 
     'has_annotation', 'volume_annotations','annotation_areas'
     ]
 
@@ -64,16 +64,16 @@ class NLST_Survival_Dataset(data.Dataset):
         
         self.split_group = split_group
         self.args = args
-        self._max_sequence_length = args.max_sequence_length # number of slices in each volume
+        self._num_images = args.num_images # number of slices in each volume
         self._max_followup = args.max_followup
 
         try:
-            self.metadata_json = json.load(open(args.metadata_file, 'r'))
+            self.metadata_json = json.load(open(args.dataset_file_path, 'r'))
         except Exception as e:
-            raise Exception(METAFILE_NOTFOUND_ERR.format(args.metadata_file, e))
+            raise Exception(METAFILE_NOTFOUND_ERR.format(args.dataset_file_path, e))
 
         augmentations = get_augmentations(split_group, args)
-        if args.file_type == 'dicom':
+        if args.img_file_type == 'dicom':
             self.input_loader = DicomLoader(args.cache_path, augmentations, args)  
         else:
             self.input_loader = OpenCVLoader(args.cache_path, augmentations, args)
@@ -86,7 +86,7 @@ class NLST_Survival_Dataset(data.Dataset):
         if len(self.dataset) == 0:
             return
         
-        print(self.get_summary_statement(self.dataset, split_group), args)
+        print(self.get_summary_statement(self.dataset, split_group))
         
         dist_key = 'y'
         label_dist = [d[dist_key] for d in self.dataset]
@@ -96,8 +96,8 @@ class NLST_Survival_Dataset(data.Dataset):
             label: weight_per_label/count for label, count in label_counts.items()
             }
         
-        print("Class counts are: {}".format(label_counts), args)
-        print("Label weights are {}".format(label_weights), args)
+        print("Class counts are: {}".format(label_counts))
+        print("Label weights are {}".format(label_weights))
         self.weights = [ label_weights[d[dist_key]] for d in self.dataset]
  
     def create_dataset(self, split_group, img_dir):
@@ -114,7 +114,7 @@ class NLST_Survival_Dataset(data.Dataset):
         self.corrupted_series = self.CORRUPTED_PATHS['series']
         self.risk_factor_vectorizer = NLSTRiskFactorVectorizer(self.args)
         
-        if not self.args.assign_splits:
+        if self.args.assign_splits:
             np.random.seed(self.args.cross_val_seed)
             self.assign_splits(self.metadata_json)
 
@@ -128,7 +128,7 @@ class NLST_Survival_Dataset(data.Dataset):
 
             for exam_dict in exams:
 
-                if self.args.use_only_thin_cuts and split_group in ['train', 'dev']:
+                if self.args.use_only_thin_cuts_for_ct and split_group in ['train', 'dev']:
                     thinnest_series_id = self.get_thinnest_cut(exam_dict)
 
                 elif split == 'test' and self.args.assign_splits:
@@ -151,7 +151,7 @@ class NLST_Survival_Dataset(data.Dataset):
                     if self.skip_sample(series_dict, pt_metadata):
                         continue
 
-                    if self.args.use_only_thin_cuts and (not series_id == thinnest_series_id):
+                    if self.args.use_only_thin_cuts_for_ct and (not series_id == thinnest_series_id):
                         continue
 
                     sample = self.get_volume_dict(series_id, series_dict, exam_dict, pt_metadata, pid, split)
@@ -235,7 +235,6 @@ class NLST_Survival_Dataset(data.Dataset):
             'pid': pid,
             'device': device,
             'institution': pt_metadata['cen'][0],
-            'cancer_location': self.get_cancer_loc(pt_metadata),
             'cancer_laterality': self.get_cancer_side(pt_metadata),
             'num_original_slices': len(series_dict['paths']),
             'additionals': []
@@ -251,9 +250,6 @@ class NLST_Survival_Dataset(data.Dataset):
             sample = self.get_ct_annotations(sample)
             sample['annotation_areas'] = get_scaled_annotation_area(sample, self.args)
             sample['has_annotation'] = np.sum(sample['volume_annotations']) > 0
-
-        if self.args.input_loader_name == 'tensor_loader':
-            sample['paths'] = [os.path.join(self.args.img_dir, '{}.pt'.format(series_id) )]
 
         sample['slice_ids'] = [os.path.splitext(os.path.basename(path))[0] for path in sample['paths'] ]
 
@@ -318,7 +314,7 @@ class NLST_Survival_Dataset(data.Dataset):
 
         if not sorted_img_paths[0].startswith(self.args.img_dir):
             sorted_img_paths = [ self.args.img_dir + path[path.find('nlst-ct-png') + len('nlst-ct-png'):] for path in sorted_img_paths]
-        if self.args.input_loader_name == 'dicom_loader':
+        if self.args.img_file_type == 'dicom':
             sorted_img_paths = [path.replace('nlst-ct-png', 'nlst-ct').replace('.png', '') for path in sorted_img_paths]
 
         return sorted_img_paths, sorted_slice_locs
