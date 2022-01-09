@@ -36,7 +36,6 @@ class SybilLightning(pl.LightningModule):
         if isinstance(args, dict):
             args = Namespace(**args)
         self.args = args
-        # TODO: use model_name to select model
         self.model = model.SybilNet(args)
         self.save_prefix = "default"
         self.save_hyperparameters()
@@ -113,7 +112,6 @@ class SybilLightning(pl.LightningModule):
             predictions_dict = gather_predictions_dict(predictions_dict)
 
         self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
-        # TODO: save predictions
         result.update(predictions_dict)
         return result
 

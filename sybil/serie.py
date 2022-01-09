@@ -102,9 +102,9 @@ class Serie:
             )
 
         thickness = float(dcm.SliceThickness) 
-        pixel_spacing: map(float, eval(dcm.PixelSpacing))
-        manifacturer: dcm.Manufacturer
-        imagetype: dcm.TransferSyntaxUID
+        pixel_spacing = map(float, eval(dcm.PixelSpacing))
+        manifacturer = dcm.Manufacturer
+        imagetype=dcm.TransferSyntaxUID
 
         volume = Volume(
             paths=dicom_paths,
