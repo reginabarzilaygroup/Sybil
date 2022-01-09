@@ -129,18 +129,11 @@ def parse_args(args_strings=None):
         help="Num epochs to finetune model",
     )
 
-    # lightning module
-    parser.add_argument(
-        "--lightning_name",
-        type=str,
-        default="default",
-        help="Name of lightning module to structure training",
-    )
-
     # data
     parser.add_argument(
         "--dataset",
         default="nlst",
+        choices=['sybil', 'nlst' 'nlst_risk_factors', 'nlst_for_plco'],
         help="Name of dataset from dataset factory to use [default: nlst]",
     )
     parser.add_argument(
@@ -213,6 +206,7 @@ def parse_args(args_strings=None):
         "--split_type",
         type=str,
         default="random",
+        choices=["random","institution_split"],
         help="How to split dataset if assign_split = True. Usage: ['random', 'institution_split'].",
     )
     parser.add_argument(
@@ -279,31 +273,14 @@ def parse_args(args_strings=None):
 
     # region annotations
     parser.add_argument(
-        "--use_region_annotations",
+        "--use_annotations",
         action="store_true",
         default=False,
-        help="whether to use image-level annotations (pixel labels) in modeling",
+        help="whether to use image annotations (pixel labels) in modeling",
     )
-    parser.add_argument(
-        "--use_volume_annotations",
-        action="store_true",
-        default=False,
-        help="whether to use volume-level annotations (image labels) in modeling",
-    )
+
     parser.add_argument(
         "--region_annotations_filepath", type=str, help="Path to annotations file"
-    )
-    parser.add_argument(
-        "--predict_volume_attentions",
-        action="store_true",
-        default=False,
-        help="Whether to predict attention scores over volume using annotations. Guided attention loss.",
-    )
-    parser.add_argument(
-        "--predict_image_attentions",
-        action="store_true",
-        default=False,
-        help="Whether to predict attention scores over single image using annotations. Guided attention loss.",
     )
     parser.add_argument(
         "--annotation_loss_lambda",
@@ -420,26 +397,6 @@ def parse_args(args_strings=None):
         help="Criterion based on which model is saved [default: c_index]",
     )
 
-    # model
-    parser.add_argument(
-        "--model_name",
-        type=str,
-        default="resnet18",
-        help="Form of model, i.e resnet18, aggregator, revnet, etc.",
-    )
-    parser.add_argument(
-        "--pretrained_on_imagenet",
-        action="store_true",
-        default=False,
-        help="Pretrain the model on imagenet. Only relevant for default models like VGG, resnet etc",
-    )
-    parser.add_argument(
-        "--pretrained_imagenet_model_name",
-        type=str,
-        default="resnet18",
-        help="Name of pretrained model to load for custom resnets.",
-    )
-
     # model checkpointing
     parser.add_argument(
         "--turn_off_checkpointing", 
@@ -513,23 +470,6 @@ def parse_args(args_strings=None):
         help="Cache full image locally as well as cachable transforms",
     )
 
-    # comet logger
-    parser.add_argument(
-        "--project_name",
-        type=str,
-        default="sandstone-sandbox",
-        help="Name of project for comet logger",
-    )
-    parser.add_argument(
-        "--workspace",
-        type=str,
-        default="yala",
-        help="Name of workspace for comet logger",
-    )
-    parser.add_argument(
-        "--comet_tags", nargs="*", default=[], help="List of tags for comet logger"
-    )
-
     # run
     parser = Trainer.add_argparse_args(parser)
     if args_strings is None:
@@ -545,9 +485,6 @@ def parse_args(args_strings=None):
         args.replace_sampler_ddp = False
 
     args.unix_username = pwd.getpwuid(os.getuid())[0]
-
-    # using annotations
-    args.use_annotations = args.use_volume_annotations or args.use_region_annotations
 
     # learning initial state
     args.step_indx = 1
