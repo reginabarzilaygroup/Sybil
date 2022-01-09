@@ -357,18 +357,6 @@ def train(args):
 
     result_path_stem = args.results_path.split("/")[-1].split('.')[0]
 
-    comet_key = os.environ.get("COMET_API_KEY")
-    if comet_key is not None:
-        tb_logger = pl.loggers.CometLogger(
-            api_key=comet_key,
-            project_name=args.project_name,
-            experiment_name=result_path_stem,
-            workspace=args.workspace,
-        )
-    else:
-        tb_logger = pl.loggers.CometLogger()
-    trainer.logger = tb_logger
-
     train_dataset = loaders.get_train_dataset_loader(
             args,
             get_dataset(args.dataset, 'train', args)
