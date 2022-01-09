@@ -355,8 +355,6 @@ def train(args):
     args.global_rank = trainer.global_rank
     args.local_rank = trainer.local_rank
 
-    result_path_stem = args.results_path.split("/")[-1].split('.')[0]
-
     train_dataset = loaders.get_train_dataset_loader(
             args,
             get_dataset(args.dataset, 'train', args)
@@ -367,6 +365,12 @@ def train(args):
             False
             )
     module = SybilLightning(args)
+
+    # print args
+    result_path_stem = args.results_path.split("/")[-1].split('.')[0]
+    for key,value in sorted(vars(args).items()):
+        print('{} -- {}'.format(key.upper(), value))
+
     trainer.fit(module, train_dataset, dev_dataset)
 
 
