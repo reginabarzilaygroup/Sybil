@@ -134,7 +134,7 @@ def parse_args(args_strings=None):
         "--lightning_name",
         type=str,
         default="default",
-        help="Name of lightning module to structure training.",
+        help="Name of lightning module to structure training",
     )
 
     # data
@@ -148,45 +148,46 @@ def parse_args(args_strings=None):
         type=int,
         nargs="+",
         default=[256, 256],
-        help="width and height of image in pixels. [default: [256,256]",
+        help="Width and height of image in pixels. [default: [256,256]]",
     )
     parser.add_argument(
         "--num_chan",
         type=int,
         default=3,
-        help="number of channels for input image"
+        help="Number of channels for input image"
     )
     parser.add_argument(
         "--img_mean",
         type=float,
         nargs='+',
         default=[128.1722],
-        help="mean of image per channel"
+        help="Mean of image per channel"
     )
     parser.add_argument(
         "--img_std",
         type=float,
         nargs='+',
         default=[87.1849],
-        help="standard deviation  of image per channel"
+        help="Standard deviation  of image per channel"
     )
     parser.add_argument(
         "--img_dir",
         type=str,
         default="/data/rsg/mammogram/NLST/nlst-ct-png",
-        help="dir of images. Note, image path in dataset jsons should stem from here",
+        help="Dir of images. Note, image path in dataset jsons should stem from here",
     )
     parser.add_argument(
         "--img_file_type",
         type=str,
         default="png",
-        help="type of image. one of [png, dicom]",
+        choices=["png", "dicom"],
+        help="Type of image. one of [png, dicom]",
     )
     parser.add_argument(
         "--dataset_file_path",
         type=str,
         default="/Mounts/rbg-storage1/datasets/NLST/full_nlst_google.json",
-        help="path to dataset file either as json or csv.",
+        help="Path to dataset file either as json or csv",
     )
     parser.add_argument(
         "--num_classes",
@@ -364,7 +365,7 @@ def parse_args(args_strings=None):
         "--primary_loss_lambda",
         type=float,
         default=1.0,
-        help="lambda to weigh the primary loss.",
+        help="Lambda to weigh the primary loss.",
     )
 
     # learning
@@ -372,13 +373,13 @@ def parse_args(args_strings=None):
         "--batch_size",
         type=int,
         default=32,
-        help="batch size for training [default: 128]",
+        help="Batch size for training [default: 128]",
     )
     parser.add_argument(
         "--init_lr",
         type=float,
         default=0.001,
-        help="initial learning rate [default: 0.001]",
+        help="Initial learning rate [default: 0.001]",
     )
     parser.add_argument(
         "--dropout",
@@ -387,7 +388,7 @@ def parse_args(args_strings=None):
         help="Amount of dropout to apply on last hidden layer [default: 0.25]",
     )
     parser.add_argument(
-        "--optimizer", type=str, default="adam", help="optimizer to use [default: adam]"
+        "--optimizer", type=str, default="adam", help="Optimizer to use [default: adam]"
     )
     parser.add_argument(
         "--momentum", type=float, default=0, help="Momentum to use with SGD"
@@ -396,7 +397,7 @@ def parse_args(args_strings=None):
         "--lr_decay",
         type=float,
         default=0.1,
-        help="initial learning rate [default: 0.5]",
+        help="Initial learning rate [default: 0.5]",
     )
     parser.add_argument(
         "--weight_decay",
@@ -410,13 +411,13 @@ def parse_args(args_strings=None):
         "--patience",
         type=int,
         default=5,
-        help="number of epochs without improvement on dev before halving learning rate and reloading best model [default: 5]",
+        help="Number of epochs without improvement on dev before halving learning rate and reloading best model [default: 5]",
     )
     parser.add_argument(
         "--tuning_metric",
         type=str,
         default="c_index",
-        help="criterion based on which model is saved [default: c_index]",
+        help="Criterion based on which model is saved [default: c_index]",
     )
 
     # model
@@ -444,21 +445,21 @@ def parse_args(args_strings=None):
         "--turn_off_checkpointing", 
         action="store_true", 
         default=False,
-        help="do not save best model"
+        help="Do not save best model"
     )
 
     parser.add_argument(
         "--save_dir",
         type=str,
         default="snapshot",
-        help="where to dump the model"
+        help="Where to dump the model"
     )
 
     parser.add_argument(
         "--snapshot",
         type=str,
         default=None,
-        help="filename of model snapshot to load[default: None]",
+        help="Filename of model snapshot to load[default: None]",
     )
 
     # system
@@ -466,7 +467,7 @@ def parse_args(args_strings=None):
         "--num_workers",
         type=int,
         default=8,
-        help="num workers for each data loader [default: 4]",
+        help="Num workers for each data loader [default: 4]",
     )
 
     # storing results
@@ -498,12 +499,12 @@ def parse_args(args_strings=None):
         "--results_path",
         type=str,
         default="logs/test.args",
-        help="where to save the result logs",
+        help="Where to save the result logs",
     )
 
     # cache
     parser.add_argument(
-        "--cache_path", type=str, default=None, help="dir to cache images."
+        "--cache_path", type=str, default=None, help="Dir to cache images."
     )
     parser.add_argument(
         "--cache_full_img",
