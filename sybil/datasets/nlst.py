@@ -1,4 +1,5 @@
 import os
+from posixpath import split
 import traceback, warnings
 import pickle, json
 import numpy as np
@@ -6,8 +7,7 @@ from tqdm import tqdm
 from collections import Counter
 from torch.utils import data
 from sybil.serie import Serie
-from sybil.augmentations import get_augmentations 
-from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader 
+from sybil.utils.loading import get_sample_loader
 from sybil.datasets.utils import fit_to_length, get_scaled_annotation_area, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
 
 from sybil.datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
@@ -71,13 +71,9 @@ class NLST_Survival_Dataset(data.Dataset):
             self.metadata_json = json.load(open(args.dataset_file_path, 'r'))
         except Exception as e:
             raise Exception(METAFILE_NOTFOUND_ERR.format(args.dataset_file_path, e))
-
-        augmentations = get_augmentations(split_group, args)
-        if args.img_file_type == 'dicom':
-            self.input_loader = DicomLoader(args.cache_path, augmentations, args)  
-        else:
-            self.input_loader = OpenCVLoader(args.cache_path, augmentations, args)
         
+        self.input_loader = get_sample_loader(split_group, args)
+
         if args.use_annotations:
             assert self.args.region_annotations_filepath, 'ANNOTATIONS METADATA FILE NOT SPECIFIED'
             self.annotations_metadata = json.load(open(self.args.region_annotations_filepath, 'r'))

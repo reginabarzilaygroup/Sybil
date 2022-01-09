@@ -1,12 +1,14 @@
+from argparse import Namespace
 import hashlib
 import collections.abc as container_abcs
 import re
-
+from typing import Literal
 import torch
 from torch.utils import data
 
 from sybil.utils.sampler import DistributedWeightedSampler
-
+from sybil.augmentations import get_augmentations 
+from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader 
 
 string_classes = (str, bytes)
 int_classes = int
@@ -81,12 +83,12 @@ def ignore_None_collate(batch):
 
 def get_train_dataset_loader(args, train_data):
     """
-        Given arg configuration, return appropriate torch.DataLoader
-        for train_data and dev_data
+    Given arg configuration, return appropriate torch.DataLoader
+    for train_data and dev_data
 
-        returns:
-        train_data_loader: iterator that returns batches
-        dev_data_loader: iterator that returns batches
+    returns:
+    train_data_loader: iterator that returns batches
+    dev_data_loader: iterator that returns batches
     """
     if args.strategy == "ddp":
         sampler = DistributedWeightedSampler(
@@ -154,3 +156,31 @@ def concat_all_gather(tensor):
     torch.distributed.all_gather(tensors_gather, tensor, async_op=False)
     output = torch.cat(tensors_gather, dim=0)
     return output
+
+def get_sample_loader(split_group: Literal['train', 'dev', 'test'], args: Namespace):
+    """[summary]
+
+    Parameters
+    ----------
+    ``split_group`` : str
+        dataset split according to which the augmentation is selected (choices are ['train', 'dev', 'test'])
+    ``args`` : Namespace
+        global args
+
+    Returns
+    -------
+    abstract_loader
+        sample loader (DicomLoader for dicoms or OpenCVLoader pngs). see sybil.loaders.image_loaders
+
+    Raises
+    ------
+    NotImplementedError
+        img_file_type must be one of "dicom" or "png"
+    """
+    augmentations = get_augmentations(split_group, args)
+    if args.img_file_type == 'dicom':
+        return DicomLoader(args.cache_path, augmentations, args)  
+    elif args.img_file_type == 'png':
+        return OpenCVLoader(args.cache_path, augmentations, args)
+    else:
+        raise NotImplementedError
