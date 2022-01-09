@@ -1,5 +1,4 @@
 import math
-from sandstone.models.factory import RegisterModel
 from tqdm import tqdm
 import pickle
 
@@ -42,8 +41,6 @@ class RiskModel(object):
     def input_transformers(self):
         pass
 
-
-@RegisterModel("plcom2012")
 class PLCOm2012(RiskModel):
     def __init__(self, args):
         super(PLCOm2012, self).__init__(args)
