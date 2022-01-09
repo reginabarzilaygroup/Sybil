@@ -367,12 +367,13 @@ def train(args):
     module = SybilLightning(args)
 
     # print args
-    result_path_stem = args.results_path.split("/")[-1].split('.')[0]
     for key,value in sorted(vars(args).items()):
         print('{} -- {}'.format(key.upper(), value))
 
     trainer.fit(module, train_dataset, dev_dataset)
 
+    print("Saving args to {}".format(args.results_path))
+    pickle.dump(vars(args), open(args.results_path,'wb'))
 
 if __name__ == "__main__":
     args = parse_args()
