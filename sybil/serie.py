@@ -15,7 +15,7 @@ class Meta(NamedTuple):
     paths : list
     thickness: float
     pixel_spacing: float
-    manifacturer: str
+    manufacturer: str
     imagetype: str
     slice_positions: list
 
@@ -63,6 +63,28 @@ class Serie:
         args = self.set_args(file_type)
         self._loader = get_sample_loader(split, args)
         self._meta = self.get_volume_metadata(dicoms, file_type)
+        self.is_valid(args)
+
+    def is_valid(self, args):
+        """
+        Check if serie is acceptable:
+
+        Parameters
+        ----------
+        `args` : Namespace
+            manually set args used to develop model
+            
+        Raises
+        ------
+        ValueError if:
+            - serie doesn't have a label, OR
+            - slice thickness is too big
+        """
+        if not self.has_label():
+            raise ValueError("label not provided.") 
+        
+        if self._meta.thickness > args.slice_thickness_filter:
+            raise ValueError("slice thickness is greater than {}.".format(args.slice_thickness_filter))
 
     def has_label(self) -> bool:
         """Check if there is a label associated with this serie.
@@ -116,21 +138,21 @@ class Serie:
 
             thickness = float(dcm.SliceThickness) 
             pixel_spacing = map(float, eval(dcm.PixelSpacing))
-            manifacturer = dcm.Manufacturer
+            manufacturer = dcm.Manufacturer
             imagetype=dcm.TransferSyntaxUID
         elif file_type == 'png':
             processed_paths = paths
             slice_positions = list(range(len(paths)))
             thickness = None
             pixel_spacing = None
-            manifacturer = None
+            manufacturer = None
             imagetype=None
 
         meta = Meta(
             paths=processed_paths,
             thickness=thickness, 
             pixel_spacing=pixel_spacing, 
-            manifacturer=manifacturer, 
+            manufacturer=manufacturer, 
             imagetype=imagetype, 
             slice_positions = slice_positions
             )
@@ -211,6 +233,7 @@ class Serie:
             'num_chan': 3,
             'cache_path': None,
             'use_annotations': False,
-            'fix_seed_for_multi_image_augmentations': True
+            'fix_seed_for_multi_image_augmentations': True,
+            'slice_thickness_filter': 5
         })
         return args

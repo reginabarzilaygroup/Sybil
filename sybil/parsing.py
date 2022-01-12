@@ -255,7 +255,6 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--slice_thickness_filter",
         type=float,
-        nargs="*",
         help="Slice thickness using, if restricting to specific thickness value.",
     )
     parser.add_argument(
