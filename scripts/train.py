@@ -364,6 +364,8 @@ def train(args):
             get_dataset(args.dataset, 'dev', args),
             False
             )
+    
+    args.censoring_distribution = metrics.get_censoring_dist(train_dataset)
     module = SybilLightning(args)
 
     # print args
