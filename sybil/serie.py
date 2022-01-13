@@ -14,8 +14,7 @@ from argparse import Namespace
 class Meta(NamedTuple):
     paths : list
     thickness: float
-    pixel_spacing: float
-    manufacturer: str
+    pixel_spacing: list
     imagetype: str
     slice_positions: list
 
@@ -131,29 +130,26 @@ class Serie:
                 dcm = pydicom.dcmread(path, stop_before_pixels = True)
                 processed_paths.append(path)
                 slice_positions.append(
-                    float(literal_eval(dcm.ImagePositionPatient)[-1])
+                    float(dcm.ImagePositionPatient[-1])
                 )
             
             processed_paths, slice_positions  = order_slices(processed_paths, slice_positions)
 
             thickness = float(dcm.SliceThickness) 
-            pixel_spacing = map(float, eval(dcm.PixelSpacing))
+            pixel_spacing = list( map(float, dcm.PixelSpacing) )
             manufacturer = dcm.Manufacturer
-            imagetype=dcm.TransferSyntaxUID
         elif file_type == 'png':
             processed_paths = paths
             slice_positions = list(range(len(paths)))
-            thickness = None
-            pixel_spacing = None
-            manufacturer = None
-            imagetype=None
+            thickness = 0
+            pixel_spacing = []
+            manufacturer = ''
 
         meta = Meta(
             paths=processed_paths,
             thickness=thickness, 
             pixel_spacing=pixel_spacing, 
             manufacturer=manufacturer, 
-            imagetype=imagetype, 
             slice_positions = slice_positions
             )
         return meta
