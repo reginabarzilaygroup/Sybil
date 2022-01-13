@@ -4,7 +4,7 @@ import math
 METAFILE_NOTFOUND_ERR = "Metadata file {} could not be parsed! Exception: {}!"
 LOAD_FAIL_MSG = "Failed to load image: {}\nException: {}"
 # Constants
-IMG_PAD_PATH = 'files/pad.tif'
+IMG_PAD_TOKEN = '<PAD>'
 
 def order_slices( img_paths, slice_locations):
     sorted_ids = np.argsort(slice_locations)
@@ -16,7 +16,7 @@ def assign_splits(meta, args):
     for idx in range(len(meta)):
         meta[idx]['split'] = np.random.choice(['train','dev','test'], p = args.split_probs) 
 
-def fit_to_length(arr, max_length,  pad_token = IMG_PAD_PATH):
+def fit_to_length(arr, max_length,  pad_token = IMG_PAD_TOKEN):
         '''
         Fits arr to max_length by either truncating arr (remove excess from both tails) 
         or padding (on both sides) arr with pad_token.

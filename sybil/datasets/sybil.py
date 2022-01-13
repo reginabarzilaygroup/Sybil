@@ -8,7 +8,7 @@ from collections import Counter
 from sybil.augmentations import get_augmentations
 from tqdm import tqdm 
 from sybil.serie import Serie
-from sybil.datasets.utils import order_slices, fit_to_length, IMG_PAD_PATH, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
+from sybil.datasets.utils import order_slices, fit_to_length, IMG_PAD_TOKEN, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
 from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader 
 
 
@@ -175,7 +175,7 @@ class SybilDataset(data.Dataset):
     
     @property
     def PAD_PATH(self):
-        return IMG_PAD_PATH
+        return IMG_PAD_TOKEN
 
     def get_summary_statement(self, dataset, split_group):
         summary = "Contructed Sybil Cancer Risk {} dataset with {} records, {} exams, {} patients, and the following class balance \n {}"
