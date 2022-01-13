@@ -45,13 +45,6 @@ class DicomLoader(abstract_loader):
     def cached_extension(self):
         return ""
 
-    def reshape_images(self, images):
-        images = torch.cat(images, dim=0)
-        rp = (self.args.num_chan, 1, 1, 1)
-        images = images.unsqueeze(0).repeat(rp)
-        return images
-
-
 def apply_windowing(image, center, width, bit_size=16):
     """Windowing function to transform image pixels for presentation.
     Must be run after a DICOM modality LUT is applied to the image.

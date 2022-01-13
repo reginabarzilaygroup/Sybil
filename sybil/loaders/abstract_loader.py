@@ -3,7 +3,7 @@ import os
 import sys
 import os.path
 import warnings
-from sybil.datasets.utils import get_scaled_annotation_mask
+from sybil.datasets.utils import get_scaled_annotation_mask, IMG_PAD_TOKEN
 from sybil.augmentations import ComposeAug
 import numpy as np
 from abc import ABCMeta, abstractmethod
@@ -132,6 +132,7 @@ class abstract_loader:
     __metaclass__ = ABCMeta
 
     def __init__(self, cache_path, augmentations, args):
+        self.pad_token = IMG_PAD_TOKEN
         self.augmentations = augmentations
         self.args = args
         if cache_path is not None:
@@ -172,6 +173,10 @@ class abstract_loader:
             if self.args.use_annotations
             else None
         )
+        if image_path == self.pad_token:
+            shape = (self.args.num_chan, self.args.img_size[0], self.args.img_size[1] )
+            image = torch.zeros(*shape)
+            return image, mask
 
         if not self.use_cache:
             image = self.load_input(image_path, additional)
