@@ -174,7 +174,7 @@ class abstract_loader:
             else None
         )
         if image_path == self.pad_token:
-            shape = (self.args.img_size[0], self.args.img_size[1], self.args.num_chan )
+            shape = (self.args.num_chan, self.args.img_size[0], self.args.img_size[1] )
             image = torch.zeros(*shape)
             return image, mask
 
