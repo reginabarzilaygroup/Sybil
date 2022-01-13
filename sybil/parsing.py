@@ -133,7 +133,7 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--dataset",
         default="nlst",
-        choices=['sybil', 'nlst' 'nlst_risk_factors', 'nlst_for_plco'],
+        choices=["sybil", "nlst" "nlst_risk_factors", "nlst_for_plco"],
         help="Name of dataset from dataset factory to use [default: nlst]",
     )
     parser.add_argument(
@@ -144,24 +144,21 @@ def parse_args(args_strings=None):
         help="Width and height of image in pixels. [default: [256,256]]",
     )
     parser.add_argument(
-        "--num_chan",
-        type=int,
-        default=3,
-        help="Number of channels for input image"
+        "--num_chan", type=int, default=3, help="Number of channels for input image"
     )
     parser.add_argument(
         "--img_mean",
         type=float,
-        nargs='+',
+        nargs="+",
         default=[128.1722],
-        help="Mean of image per channel"
+        help="Mean of image per channel",
     )
     parser.add_argument(
         "--img_std",
         type=float,
-        nargs='+',
+        nargs="+",
         default=[87.1849],
-        help="Standard deviation  of image per channel"
+        help="Standard deviation  of image per channel",
     )
     parser.add_argument(
         "--img_dir",
@@ -183,10 +180,7 @@ def parse_args(args_strings=None):
         help="Path to dataset file either as json or csv",
     )
     parser.add_argument(
-        "--num_classes",
-        type=int,
-        default=6,
-        help="Number of classes to predict"
+        "--num_classes", type=int, default=6, help="Number of classes to predict"
     )
 
     # Alternative training/testing schemes
@@ -206,7 +200,7 @@ def parse_args(args_strings=None):
         "--split_type",
         type=str,
         default="random",
-        choices=["random","institution_split"],
+        choices=["random", "institution_split"],
         help="How to split dataset if assign_split = True. Usage: ['random', 'institution_split'].",
     )
     parser.add_argument(
@@ -219,10 +213,7 @@ def parse_args(args_strings=None):
 
     # survival analysis setup
     parser.add_argument(
-        "--max_followup", 
-        type=int,
-        default=6, 
-        help="Max followup to predict over"
+        "--max_followup", type=int, default=6, help="Max followup to predict over"
     )
 
     # risk factors
@@ -398,17 +389,14 @@ def parse_args(args_strings=None):
 
     # model checkpointing
     parser.add_argument(
-        "--turn_off_checkpointing", 
-        action="store_true", 
+        "--turn_off_checkpointing",
+        action="store_true",
         default=False,
-        help="Do not save best model"
+        help="Do not save best model",
     )
 
     parser.add_argument(
-        "--save_dir",
-        type=str,
-        default="snapshot",
-        help="Where to dump the model"
+        "--save_dir", type=str, default="snapshot", help="Where to dump the model"
     )
 
     parser.add_argument(
@@ -482,6 +470,9 @@ def parse_args(args_strings=None):
     ):
         args.strategy = "ddp"
         args.replace_sampler_ddp = False
+    else:
+        args.strategy = None
+        args.replace_sampler_ddp = False
 
     args.unix_username = pwd.getpwuid(os.getuid())[0]
 
@@ -512,4 +503,3 @@ def parse_list_args(args):
     args.tensor_augmentations = parse_augmentations(args.tensor_augmentations)
     args.test_image_augmentations = parse_augmentations(args.test_image_augmentations)
     args.test_tensor_augmentations = parse_augmentations(args.test_tensor_augmentations)
-

@@ -3,7 +3,7 @@ import cv2
 import torch
 import pydicom
 from pydicom.pixel_data_handlers.util import apply_modality_lut
-import numpy as np 
+import numpy as np
 
 LOADING_ERROR = "LOADING ERROR! {}"
 
@@ -27,7 +27,7 @@ class DicomLoader(abstract_loader):
     def __init__(self, cache_path, augmentations, args):
         super(DicomLoader, self).__init__(cache_path, augmentations, args)
         self.window_center = -600
-        self.window_width  = 1500
+        self.window_width = 1500
 
     def configure_path(self, path, additional, sample):
         return path
@@ -45,15 +45,12 @@ class DicomLoader(abstract_loader):
     def cached_extension(self):
         return ""
 
-    @property
-    def apply_augmentations(self):
-        return False
-
     def reshape_images(self, images):
         images = torch.cat(images, dim=0)
         rp = (self.args.num_chan, 1, 1, 1)
         images = images.unsqueeze(0).repeat(rp)
         return images
+
 
 def apply_windowing(image, center, width, bit_size=16):
     """Windowing function to transform image pixels for presentation.
@@ -71,7 +68,7 @@ def apply_windowing(image, center, width, bit_size=16):
         ndarray: Numpy array of transformed images
     """
     y_min = 0
-    y_max = (2**bit_size - 1)
+    y_max = 2 ** bit_size - 1
     y_range = y_max - y_min
 
     c = center - 0.5
@@ -84,8 +81,6 @@ def apply_windowing(image, center, width, bit_size=16):
     image[below] = y_min
     image[above] = y_max
     if between.any():
-        image[between] = (
-                ((image[between] - c) / w + 0.5) * y_range + y_min
-        )
+        image[between] = ((image[between] - c) / w + 0.5) * y_range + y_min
 
     return image

@@ -9,10 +9,12 @@ import numpy as np
 from abc import ABCMeta, abstractmethod
 import hashlib
 
-CACHED_FILES_EXT = '.png'
-DEFAULT_CACHE_DIR = 'default/'
+CACHED_FILES_EXT = ".png"
+DEFAULT_CACHE_DIR = "default/"
 
-CORUPTED_FILE_ERR = 'WARNING! Error processing file from cache - removed file from cache. Error: {}'
+CORUPTED_FILE_ERR = (
+    "WARNING! Error processing file from cache - removed file from cache. Error: {}"
+)
 
 
 def md5(key):
@@ -21,8 +23,9 @@ def md5(key):
     """
     return hashlib.md5(key.encode()).hexdigest()
 
+
 def split_augmentations_by_cache(augmentations):
-    '''
+    """
     Given a list of augmentations, returns a list of tuples. Each tuple
     contains a caching key of the augmentations up to the spiltting point,
     and a list of augmentations that should be applied afterwards.
@@ -33,12 +36,12 @@ def split_augmentations_by_cache(augmentations):
 
     Note - splitting will be done for indexes that all augmentations up to them are
     cachable.
-    '''
+    """
     # list of (cache key, post augmentations)
     split_augmentations = []
     split_augmentations.append((DEFAULT_CACHE_DIR, augmentations))
     all_prev_cachable = True
-    key = ''
+    key = ""
     for ind, trans in enumerate(augmentations):
 
         # check trans.cachable() first separately to save run time
@@ -46,26 +49,29 @@ def split_augmentations_by_cache(augmentations):
             all_prev_cachable = False
         else:
             key += trans.caching_keys()
-            post_augmentations = augmentations[
-                ind + 1:] if ind < len(augmentations) else []
+            post_augmentations = (
+                augmentations[ind + 1 :] if ind < len(augmentations) else []
+            )
             split_augmentations.append((key, post_augmentations))
 
     return list(reversed(split_augmentations))
 
 
-def apply_augmentations_and_cache(image,
-                                 mask,
-                                 additional,
-                                 img_path,
-                                 augmentations,
-                                 cache,
-                                 cache_full_size=False,
-                                 base_key=''):
-    '''
+def apply_augmentations_and_cache(
+    image,
+    mask,
+    additional,
+    img_path,
+    augmentations,
+    cache,
+    cache_full_size=False,
+    base_key="",
+):
+    """
     Loads the image by its absolute path and apply the augmentations one
     by one (similar to what the composed one is doing).  All first cachable
     transformer's output is cached (until reaching a non cachable one).
-    '''
+    """
     if cache_full_size and not cache.exists(img_path, DEFAULT_CACHE_DIR):
         cache.add(img_path, DEFAULT_CACHE_DIR, image)
 
@@ -82,22 +88,21 @@ def apply_augmentations_and_cache(image,
     return image, mask
 
 
-class cache():
+class cache:
     def __init__(self, path, extension=CACHED_FILES_EXT):
         if not os.path.exists(path):
             os.makedirs(path)
 
         self.cache_dir = path
         self.files_extension = extension
-        if '.npy' != extension:
-            self.files_extension += '.npy'
+        if ".npy" != extension:
+            self.files_extension += ".npy"
 
     def _file_dir(self, attr_key):
         return os.path.join(self.cache_dir, attr_key)
 
     def _file_path(self, attr_key, hashed_key):
-        return os.path.join(self.cache_dir, attr_key, hashed_key +
-                                   self.files_extension)
+        return os.path.join(self.cache_dir, attr_key, hashed_key + self.files_extension)
 
     def exists(self, image_path, attr_key):
         hashed_key = md5(image_path)
@@ -122,7 +127,8 @@ class cache():
         except OSError:
             pass
 
-class abstract_loader():
+
+class abstract_loader:
     __metaclass__ = ABCMeta
 
     def __init__(self, cache_path, augmentations, args):
@@ -154,79 +160,98 @@ class abstract_loader():
     def apply_augmentations(self):
         return True
 
-
     def get_image(self, path, additional, sample):
-        '''
+        """
         Returns a transformed image by its absolute path.
         If cache is used - transformed image will be loaded if available,
         and saved to cache if not.
-        '''
+        """
         image_path = self.configure_path(path, additional, sample)
-        mask = get_scaled_annotation_mask(additional, self.args) if self.args.use_annotations else None
+        mask = (
+            get_scaled_annotation_mask(additional, self.args)
+            if self.args.use_annotations
+            else None
+        )
 
         if not self.use_cache:
             image = self.load_input(image_path, additional)
             # hidden loaders typically do not use augmentation
             if self.apply_augmentations:
-                image, mask =  self.composed_all_augmentations(image, mask, additional)
+                image, mask = self.composed_all_augmentations(image, mask, additional)
             return image, mask
 
         for key, post_augmentations in self.split_augmentations:
-            base_key = DEFAULT_CACHE_DIR+key if key != DEFAULT_CACHE_DIR else DEFAULT_CACHE_DIR
+            base_key = (
+                DEFAULT_CACHE_DIR + key
+                if key != DEFAULT_CACHE_DIR
+                else DEFAULT_CACHE_DIR
+            )
             if self.cache.exists(image_path, base_key):
                 try:
                     image = self.cache.get(image_path, base_key)
                     if self.apply_augmentations:
                         image, mask = apply_augmentations_and_cache(
-                                image,
-                                mask,
-                                additional,
-                                image_path,
-                                post_augmentations,
-                                self.cache,
-                                cache_full_size=self.args.cache_full_img,
-                                base_key= base_key)
+                            image,
+                            mask,
+                            additional,
+                            image_path,
+                            post_augmentations,
+                            self.cache,
+                            cache_full_size=self.args.cache_full_img,
+                            base_key=base_key,
+                        )
                     return image, mask
                 except Exception as e:
                     print(e)
                     hashed_key = md5(image_path)
                     corrupted_file = self.cache._file_path(key, hashed_key)
-                    warnings.warn(CORUPTED_FILE_ERR.format(
-                                                   sys.exc_info()[0]))
+                    warnings.warn(CORUPTED_FILE_ERR.format(sys.exc_info()[0]))
                     self.cache.rem(image_path, key)
         all_augmentations = self.split_augmentations[-1][1]
         image = self.load_input(image_path, additional)
         if self.apply_augmentations:
-            image, mask = apply_augmentations_and_cache(image, mask, additional, image_path, all_augmentations,
-                                             self.cache, cache_full_size=self.args.cache_full_img, base_key=key)
+            image, mask = apply_augmentations_and_cache(
+                image,
+                mask,
+                additional,
+                image_path,
+                all_augmentations,
+                self.cache,
+                cache_full_size=self.args.cache_full_img,
+                base_key=key,
+            )
 
         return image, mask
 
-
     def get_images(self, paths, additionals, sample):
-        '''
+        """
         Returns a stack of transformed images by their absolute paths.
         If cache is used - transformed images will be loaded if available,
         and saved to cache if not.
-        '''
+        """
 
-        sample_fixed_seed = np.random.randint(0, 2**32-1)
+        sample_fixed_seed = np.random.randint(0, 2 ** 32 - 1)
         additionals += [{}] * (len(paths) - len(additionals))
         for i, addit in enumerate(additionals):
             if addit is None:
                 additionals[i] = {}
-            if self.args.fix_seed_for_multi_image_augmentations and ('seed' not in additionals[i]):
-                additionals[i]['seed'] = sample_fixed_seed
+            if self.args.fix_seed_for_multi_image_augmentations and (
+                "seed" not in additionals[i]
+            ):
+                additionals[i]["seed"] = sample_fixed_seed
 
         # get images for multi image input
-        images_masks = [self.get_image(path, additional, sample) for path, additional in zip(paths, additionals)]
+        images_masks = [
+            self.get_image(path, additional, sample)
+            for path, additional in zip(paths, additionals)
+        ]
         images, masks = [i[0] for i in images_masks], [i[1] for i in images_masks]
 
         images = self.reshape_images(images)
         masks = self.reshape_images(masks) if self.args.use_annotations else None
 
         return images, masks
-    
+
     def reshape_images(self, images):
         images = [im.unsqueeze(0) for im in images]
         images = torch.cat(images, dim=0)

@@ -7,8 +7,8 @@ import torch
 from torch.utils import data
 
 from sybil.utils.sampler import DistributedWeightedSampler
-from sybil.augmentations import get_augmentations 
-from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader 
+from sybil.augmentations import get_augmentations
+from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader
 
 string_classes = (str, bytes)
 int_classes = int
@@ -157,7 +157,8 @@ def concat_all_gather(tensor):
     output = torch.cat(tensors_gather, dim=0)
     return output
 
-def get_sample_loader(split_group: Literal['train', 'dev', 'test'], args: Namespace):
+
+def get_sample_loader(split_group: Literal["train", "dev", "test"], args: Namespace):
     """[summary]
 
     Parameters
@@ -178,9 +179,9 @@ def get_sample_loader(split_group: Literal['train', 'dev', 'test'], args: Namesp
         img_file_type must be one of "dicom" or "png"
     """
     augmentations = get_augmentations(split_group, args)
-    if args.img_file_type == 'dicom':
-        return DicomLoader(args.cache_path, augmentations, args)  
-    elif args.img_file_type == 'png':
+    if args.img_file_type == "dicom":
+        return DicomLoader(args.cache_path, augmentations, args)
+    elif args.img_file_type == "png":
         return OpenCVLoader(args.cache_path, augmentations, args)
     else:
         raise NotImplementedError

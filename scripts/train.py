@@ -2,14 +2,10 @@ from collections import OrderedDict
 from argparse import Namespace
 import pickle
 import os
-
-import comet_ml
+import sys
 
 import pytorch_lightning as pl
 import torch
-
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 from sybil.utils.helpers import get_dataset
 import sybil.utils.losses as losses
@@ -17,6 +13,8 @@ import sybil.utils.metrics as metrics
 import sybil.utils.loading as loaders
 import sybil.models.sybil as model
 from sybil.parsing import parse_args
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 
 class SybilLightning(pl.LightningModule):
@@ -38,16 +36,16 @@ class SybilLightning(pl.LightningModule):
         self.args = args
         self.model = model.SybilNet(args)
         self.save_prefix = "default"
-        self.save_hyperparameters()
+        self.save_hyperparameters(args)
 
     def set_finetune(self, finetune_flag):
         return
 
-    def forward(self, x, batch):
-        return self.model(x, batch)
+    def forward(self, x):
+        return self.model(x)
 
     def step(self, batch, batch_idx, optimizer_idx, log_key_prefix=""):
-        model_output = self.model(batch["x"], batch=batch)
+        model_output = self(batch["x"])
         logging_dict, predictions_dict = OrderedDict(), OrderedDict()
 
         if "exam" in batch:
@@ -349,6 +347,8 @@ def train(args):
         )
         args.callbacks = [checkpoint_callback]
     trainer = pl.Trainer.from_argparse_args(args)
+    # Remove callbacks from args for safe pickling later
+    args.callbacks = None
     args.num_nodes = trainer.num_nodes
     args.num_processes = trainer.num_processes
     args.world_size = args.num_nodes * args.num_processes
@@ -356,26 +356,24 @@ def train(args):
     args.local_rank = trainer.local_rank
 
     train_dataset = loaders.get_train_dataset_loader(
-            args,
-            get_dataset(args.dataset, 'train', args)
-            )
+        args, get_dataset(args.dataset, "train", args)
+    )
     dev_dataset = loaders.get_eval_dataset_loader(
-            args,
-            get_dataset(args.dataset, 'dev', args),
-            False
-            )
-    
-    args.censoring_distribution = metrics.get_censoring_dist(train_dataset)
+        args, get_dataset(args.dataset, "dev", args), False
+    )
+
+    args.censoring_distribution = metrics.get_censoring_dist(train_dataset.dataset)
     module = SybilLightning(args)
 
     # print args
-    for key,value in sorted(vars(args).items()):
-        print('{} -- {}'.format(key.upper(), value))
+    for key, value in sorted(vars(args).items()):
+        print("{} -- {}".format(key.upper(), value))
 
     trainer.fit(module, train_dataset, dev_dataset)
 
     print("Saving args to {}".format(args.results_path))
-    pickle.dump(vars(args), open(args.results_path,'wb'))
+    pickle.dump(vars(args), open(args.results_path, "wb"))
+
 
 if __name__ == "__main__":
     args = parse_args()

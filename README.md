@@ -9,64 +9,32 @@ You can load our pretrained model trained on the NLST dataset, and score a given
 ```python
 from sybil import Serie, Sybil
 
-# Create a Serie from a list of DICOM paths
-serie = Serie([dicom_path_1, dicom_path_2, ...])
-
 # Load a trained model
-model = Sybil.load("sybil_large")
+model = Sybil.load("sybil_base")
 
 # Get risk scores
-scores = model.score(serie)
+serie = Serie([dicom_path_1, dicom_path_2, ...])
+scores = model.predict([serie])
+
+# You can also evaluate by providing labels
+serie = Serie([dicom_path_1, dicom_path_2, ...], label=1)
+results = model.evaluate([serie])
+
 ```
 
+Models available are: `sybil_base` and `sybil_ensemble`.
 
-## Evaluate
+## Replicating results
 
-If you wish to evaluate our model on a 
+You can replicate the results from our model using our training script:
 
-```python
-from sybil import Serie, Sybil
-
-# Create a Serie from a list of DICOM paths
-series: List[Serie] = [...]
-
-# Train a new model
-# Load a trained model
-model = Sybil.load("sybil_large")
-model.evaluate(series)
-```
-
-
-## Training
-
-
-```python
-from sybil import Serie, Sybil
-
-# Create a Serie from a list of DICOM paths
-series: List[Serie] = [...]
-
-# Train a new model
-model = Sybil()
-model.fit(series)
+```sh
+python train.py
 ```
 
 See our [documentation] for a full description of Sybil's training parameters.
-## Finetuning
-
-```python
-from sybil import Serie, Sybil
-
-# Create a Serie from a list of DICOM paths
-series: List[Serie] = [...]
-
-# Train a new model
-model = Sybil()
-model.finetune(series)
-```
-
-See our [documentation] for a full description of Sybil's training parameters.
-
 
 ## Cite
+
+Coming soon.
 
