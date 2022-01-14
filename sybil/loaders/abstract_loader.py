@@ -87,46 +87,53 @@ def apply_augmentations_and_cache(
 
     return image, mask
 
-
-class cache:
+class cache():
     def __init__(self, path, extension=CACHED_FILES_EXT):
         if not os.path.exists(path):
             os.makedirs(path)
 
         self.cache_dir = path
         self.files_extension = extension
-        if ".npy" != extension:
-            self.files_extension += ".npy"
+        if '.npy' != extension:
+            self.files_extension += '.npy'
 
-    def _file_dir(self, attr_key):
-        return os.path.join(self.cache_dir, attr_key)
+    def _file_dir(self, attr_key, par_dir):
+        return os.path.join(self.cache_dir, attr_key, par_dir)
+    
+    def _file_path(self, attr_key, par_dir, hashed_key):
+        return os.path.join(
+            self.cache_dir, attr_key, par_dir, 
+            hashed_key + self.files_extension)
 
-    def _file_path(self, attr_key, hashed_key):
-        return os.path.join(self.cache_dir, attr_key, hashed_key + self.files_extension)
+    def _parent_dir(self, path):
+        return os.path.basename(os.path.dirname(path))
 
     def exists(self, image_path, attr_key):
         hashed_key = md5(image_path)
-        return os.path.isfile(self._file_path(attr_key, hashed_key))
+        par_dir = self._parent_dir(image_path)
+        return os.path.isfile(self._file_path(attr_key, par_dir, hashed_key))
 
     def get(self, image_path, attr_key):
         hashed_key = md5(image_path)
-        return np.load(self._file_path(attr_key, hashed_key))
+        par_dir = self._parent_dir(image_path)
+        return np.load(self._file_path(attr_key, par_dir, hashed_key))
 
     def add(self, image_path, attr_key, image):
         hashed_key = md5(image_path)
-        file_dir = self._file_dir(attr_key)
+        par_dir = self._parent_dir(image_path)
+        file_dir = self._file_dir(attr_key, par_dir)
         if not os.path.exists(file_dir):
             os.makedirs(file_dir)
-        np.save(self._file_path(attr_key, hashed_key), image)
+        np.save(self._file_path(attr_key, par_dir, hashed_key), image)
 
     def rem(self, image_path, attr_key):
         hashed_key = md5(image_path)
+        par_dir = self._parent_dir(image_path)
         try:
-            os.remove(self._file_path(attr_key, hashed_key))
+            os.remove(self._file_path(attr_key, par_dir, hashed_key))
         # Don't raise error if file not exists.
         except OSError:
             pass
-
 
 class abstract_loader:
     __metaclass__ = ABCMeta
