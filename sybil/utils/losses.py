@@ -195,3 +195,16 @@ def get_risk_factor_loss(model_output, batch, model, args):
         # preds = torch.argmax(probs, dim=-1).view(-1)
 
     return total_loss * args.primary_loss_lambda, logging_dict, predictions
+
+def discriminator_loss(model_output, batch, model, args):
+    logging_dict, predictions = OrderedDict(), OrderedDict()
+    d_output = model.discriminator(model_output, batch)
+    loss = F.cross_entropy(d_output['logit'], batch['origin_dataset'].long()) * args.adv_loss_lambda
+    logging_dict['discrim_loss'] = loss.detach()
+    predictions['discrim_probs'] = d_output['logit'].detach()
+    predictions['discrim_golds'] = batch['origin_dataset']
+
+    if model.reverse_discrim_loss:
+        loss = -loss
+        
+    return loss, logging_dict, predictions
