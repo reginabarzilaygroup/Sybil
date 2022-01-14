@@ -37,6 +37,11 @@ class SybilLightning(pl.LightningModule):
         self.model = model.SybilNet(args)
         self.save_prefix = "default"
         self.save_hyperparameters(args)
+        self._list_of_metrics = [
+            metrics.get_classification_metrics,
+            metrics.get_survival_metrics,
+            metrics.get_risk_metrics
+        ]
 
     def set_finetune(self, finetune_flag):
         return
@@ -121,7 +126,7 @@ class SybilLightning(pl.LightningModule):
         # and logging twice creates issue
         del outputs["loss"]
         epoch_metrics = compute_epoch_metrics(
-            outputs, self.args, self.device, key_prefix="train_"
+            self._list_of_metrics, outputs, self.args, self.device, key_prefix="train_"
         )
         for k, v in outputs["logs"].items():
             epoch_metrics[k] = v.mean()
@@ -132,7 +137,7 @@ class SybilLightning(pl.LightningModule):
             return
         outputs = gather_step_outputs(outputs)
         epoch_metrics = compute_epoch_metrics(
-            outputs, self.args, self.device, key_prefix="val_"
+            self._list_of_metrics, outputs, self.args, self.device, key_prefix="val_"
         )
         for k, v in outputs["logs"].items():
             epoch_metrics[k] = v.mean()
@@ -143,7 +148,7 @@ class SybilLightning(pl.LightningModule):
             return
         outputs = gather_step_outputs(outputs)
         epoch_metrics = compute_epoch_metrics(
-            outputs, self.args, self.device, key_prefix=self.save_prefix
+            self._list_of_metrics, outputs, self.args, self.device, key_prefix=self.save_prefix
         )
 
         for k, v in outputs["logs"].items():
@@ -291,14 +296,8 @@ def concat_all_gather(tensor):
     return output
 
 
-def compute_epoch_metrics(result_dict, args, device, key_prefix=""):
+def compute_epoch_metrics(list_of_metrics, result_dict, args, device, key_prefix=""):
     stats_dict = OrderedDict()
-
-    list_of_metrics = [
-        metrics.get_classification_metrics,
-        metrics.get_survival_metrics,
-        metrics.get_risk_metrics,
-    ]
 
     """
         Remove prefix from keys. For instance, convert:
