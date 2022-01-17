@@ -290,43 +290,7 @@ def parse_args(args_strings=None):
         default=1,
         help="Weight of loss for predicting volume attention scores",
     )
-
-    # augmentations
-    parser.add_argument(
-        "--image_augmentations",
-        nargs="*",
-        default=["scale_2d"],
-        help='List of image-transformations to use [default: ["scale_2d"]] \
-                        Usage: "--image_augmentations trans1/arg1=5/arg2=2 trans2 trans3/arg4=val"',
-    )
-    parser.add_argument(
-        "--tensor_augmentations",
-        nargs="*",
-        default=["normalize_2d"],
-        help='List of tensor-transformations to use [default: ["normalize_2d"]]\
-                        Usage: similar to image_augmentations',
-    )
-    parser.add_argument(
-        "--test_image_augmentations",
-        nargs="*",
-        default=["scale_2d"],
-        help='List of image-transformations to use for the dev and test dataset [default: ["scale_2d"]] \
-                        Usage: similar to image_augmentations',
-    )
-    parser.add_argument(
-        "--test_tensor_augmentations",
-        nargs="*",
-        default=["normalize_2d"],
-        help='List of tensor-transformations to use for the dev and test dataset [default: ["normalize_2d"]]\
-                        Usage: similar to image_augmentations',
-    )
-    parser.add_argument(
-        "--fix_seed_for_multi_image_augmentations",
-        action="store_true",
-        default=False,
-        help="Whether to use the same seed (same random augmentations) for multi image inputs.",
-    )
-
+    
     # regularization
     parser.add_argument(
         "--primary_loss_lambda",
@@ -483,23 +447,3 @@ def parse_args(args_strings=None):
     parse_list_args(args)
 
     return args
-
-
-def parse_list_args(args):
-    """Converts list args to their appropriate data format.
-
-    Includes parsing image dimension args, augmentation args,
-    block layout args, and more.
-
-    Arguments:
-        args(Namespace): Config.
-
-    Returns:
-        args but with certain elements modified to be in the
-        appropriate data format.
-    """
-
-    args.image_augmentations = parse_augmentations(args.image_augmentations)
-    args.tensor_augmentations = parse_augmentations(args.tensor_augmentations)
-    args.test_image_augmentations = parse_augmentations(args.test_image_augmentations)
-    args.test_tensor_augmentations = parse_augmentations(args.test_tensor_augmentations)
