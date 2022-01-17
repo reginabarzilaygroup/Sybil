@@ -1,1 +1,45 @@
-# Sybil
+# Sybil Training Parameters
+
+### Train Sybil on NLST
+
+```sh 
+python train.py \
+    --dataset nlst \
+    --batch_size 3  \
+    --gpus 8 \
+    --precision 16 \
+    --max_followup 6 \
+    --img_file_type png \
+    --min_num_images 0 \
+    --num_images 200 \
+    --use_only_thin_cuts_for_ct \
+    --use_annotations \
+    --img_mean 128.1722 \
+    --img_std 87.1849 \
+    --img_size 256 256 \
+    --num_chan 3 \
+    --limit_train_batches 0.5 \
+    --limit_val_batches 1.0 \
+    --max_epochs 10 \
+    --init_lr 3e-5 \
+    --lr_decay 0.1 \
+    --weight_decay 1e-2 \
+    --momentum 0.9 \
+    --dropout 0.1 \
+    --optimizer adam \
+    --patience 5 \
+    --tuning_metric c_index \
+    --num_workers 3 \
+    --profiler simple
+    --num_sanity_val_steps 0 \
+    --save_dir /Mounts/rbg-storage1/snapshots/lung_ct \
+    --img_dir /data/rsg/mammogram/NLST/nlst-ct-png \
+    --results_path /Mounts/rbg-storage1/logs/lung_ct \
+    --cache_path /storage/nlst_cache
+```
+
+### Train Sybil on NLST and MGH with domain adaptation
+
+```sh
+python train_jointly.py \
+```
