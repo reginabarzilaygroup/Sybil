@@ -133,7 +133,7 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--dataset",
         default="nlst",
-        choices=["sybil", "nlst" "nlst_risk_factors", "nlst_for_plco"],
+        choices=["sybil", "nlst", "nlst_risk_factors", "nlst_for_plco", "mgh", "nlst_mgh"],
         help="Name of dataset from dataset factory to use [default: nlst]",
     )
     parser.add_argument(
@@ -172,6 +172,12 @@ def parse_args(args_strings=None):
         default="png",
         choices=["png", "dicom"],
         help="Type of image. one of [png, dicom]",
+    )
+    parser.add_argument(
+        "--fix_seed_for_multi_image_augmentations",
+        action="store_true",
+        default=False,
+        help="Use same seed for each slice of volume augmentations",
     )
     parser.add_argument(
         "--dataset_file_path",

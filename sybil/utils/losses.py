@@ -115,7 +115,7 @@ def get_annotation_loss(model_output, batch, model, args):
             annotation_gold = batch["annotation_areas"].float() * batch_mask[:, None]
 
             if N != args.num_images:
-                annotation_gold = annotation_gold.view(B, N, -1).sum(dim=2)
+                annotation_gold = F.interpolate(annotation_gold.unsqueeze(1), (N), mode= 'linear')[:,0]  # annotation_gold.view(B, N, -1).sum(dim=2)
             area_per_slice = annotation_gold.sum(-1).unsqueeze(-1)
             area_per_slice[area_per_slice == 0] = 1
             annotation_gold /= area_per_slice
