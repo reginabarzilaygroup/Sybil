@@ -25,19 +25,7 @@ class AlignmentMLP(nn.Module):
 
     def forward(self, model_output, batch=None):
         # concatenate hiddens of chosen layers
-        hiddens = []
-        for layer_name in self.args.adv_on_layers:
-            if layer_name == 'hidden':
-                hiddens.append(model_output['hidden'])
-            elif layer_name == 'logit':
-                hiddens.append(model_output['logit'])
-            else:
-                layer_hiddens = model_output['layer_{}_hidden'.format(layer_name)]
-                n_samples = batch['x'].shape[0]
-                hiddens.append(layer_hiddens.view(n_samples, -1))
-
-        hiddens = torch.cat(hiddens, dim=1)
-    
+        hiddens = model_output['hidden']
         # pass hiddens through mlp
         output = {
             'logit': self.model(hiddens)
