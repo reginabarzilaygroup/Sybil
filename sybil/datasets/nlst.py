@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from collections import Counter
 import torch
+import torch.nn.functional as F
 from torch.utils import data
 from sybil.serie import Serie
 from sybil.utils.loading import get_sample_loader
@@ -22,7 +23,7 @@ CORRUPTED_PATHS = '/Mounts/rbg-storage1/datasets/NLST/corrupted_img_paths.pkl'
 CT_ITEM_KEYS = [
     'pid', 'exam', 'series', 'y_seq', 'y_mask', 'time_at_event',
     'cancer_laterality', 
-    'has_annotation', 'volume_annotations','annotation_areas',
+    'has_annotation', 
     'origin_dataset'
     ]
 
@@ -435,6 +436,7 @@ class NLST_Survival_Dataset(data.Dataset):
     def __getitem__(self, index):
         sample = self.dataset[index]
         try:
+            item = {}
             x, mask = self.input_loader.get_images(sample['paths'], sample['additionals'], sample)
             
             if self.args.use_all_images: 
@@ -443,23 +445,28 @@ class NLST_Survival_Dataset(data.Dataset):
                 if mask is not None:
                     mask = torch.nn.functional.interpolate(mask.unsqueeze(0), (self._num_images, h, w))[0]
             
-            item = {
-                'x': x,
-                'y': sample['y']
-                }
-
             if self.args.use_annotations:
-                item['mask'] = mask
-                mask = item.pop('mask')
+                #item['mask'] = mask
+                #mask = item.pop('mask')
                 mask = torch.abs(mask)
                 mask_area = mask.sum(dim=(-1,-2) ).unsqueeze(-1).unsqueeze(-1)
                 mask_area[mask_area==0] = 1
                 mask = mask/mask_area
                 item['image_annotations'] = mask
+                if self.args.use_all_images: 
+                    t = torch.from_numpy(sample['annotation_areas'])
+                    item['annotation_areas'] =  F.interpolate(t[None,None], (self._num_images), mode= 'linear')[0,0]
+                    t = torch.from_numpy(sample['volume_annotations']).float()
+                    item['volume_annotations'] = F.interpolate(t[None,None], (self._num_images), mode= 'linear')[0,0]
+                else:
+                    item['annotation_areas'] = sample['annotation_areas']
+                    item['volume_annotations'] = sample['volume_annotations']
             
             if self.args.use_risk_factors:
                 item['risk_factors'] = sample['risk_factors']
             
+            item['x'] = x
+            item['y'] = sample['y']
             for key in CT_ITEM_KEYS:
                 if key in sample:
                     item[key] = sample[key]
