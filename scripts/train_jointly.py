@@ -4,6 +4,7 @@ import pickle
 import os
 import sys
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import pytorch_lightning as pl
 import torch
 
@@ -18,7 +19,6 @@ from scripts.train import (
     SybilLightning,
     prefix_dict
     )
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 class SybilLightningAdapt(SybilLightning):
     """
@@ -33,9 +33,10 @@ class SybilLightningAdapt(SybilLightning):
     """
 
     def __init__(self, args):
-        super(SybilLightningAdapt, self).__init__()
+        super(SybilLightningAdapt, self).__init__(args)
         if isinstance(args, dict):
             args = Namespace(**args)
+        args.hidden_dim = self.model.hidden_dim
         self.args = args
         self.discriminator = models.adversary.AlignmentMLP(args)
         self.save_prefix = "default"
@@ -52,7 +53,7 @@ class SybilLightningAdapt(SybilLightning):
 
         if optimizer_idx == 0 or optimizer_idx is None:
             self.reverse_discrim_loss = True
-            model_output = self.model(batch['x'], batch=batch)
+            model_output = self(batch['x'])
 
             if 'exam' in batch:
                 predictions_dict['exam'] = batch['exam']
@@ -77,7 +78,7 @@ class SybilLightningAdapt(SybilLightning):
         elif optimizer_idx == 1:
             self.reverse_discrim_loss = False
             with torch.no_grad():
-                model_output = self.model(batch['x'], batch=batch)
+                model_output = self.model(batch['x'])
 
             loss, local_log_dict, local_predictions_dict = losses.discriminator_loss(model_output, batch, self, self.args)
             logging_dict.update(local_log_dict)
@@ -192,7 +193,7 @@ def train(args):
     )
 
     args.censoring_distribution = metrics.get_censoring_dist(train_dataset.dataset)
-    module = SybilLightning(args)
+    module = SybilLightningAdapt(args)
 
     # print args
     for key, value in sorted(vars(args).items()):
