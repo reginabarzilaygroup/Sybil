@@ -232,6 +232,12 @@ def parse_args(args_strings=None):
 
     # handling CT slices
     parser.add_argument(
+        "--use_all_images",
+        action='store_true',
+        default=False,
+        help="Whether to use all slices as input. In which case, the num_images arg is used to interpolate volumes to constant depth",
+    )
+    parser.add_argument(
         "--num_images",
         type=int,
         default=200,
@@ -442,8 +448,5 @@ def parse_args(args_strings=None):
 
     # learning initial state
     args.step_indx = 1
-
-    # Parse list args to appropriate data format
-    parse_list_args(args)
 
     return args

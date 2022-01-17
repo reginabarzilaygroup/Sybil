@@ -5,6 +5,7 @@ import pickle, json
 import numpy as np
 from tqdm import tqdm
 from collections import Counter
+import torch
 from torch.utils import data
 from sybil.serie import Serie
 from sybil.utils.loading import get_sample_loader
@@ -238,9 +239,10 @@ class NLST_Survival_Dataset(data.Dataset):
         
         if self.args.use_risk_factors:
             sample['risk_factors'] = self.get_risk_factors(pt_metadata, screen_timepoint, return_dict = False)
-
-        sample['paths'] =  fit_to_length(sorted_img_paths, self.args.num_images )
-        sample['slice_locations'] = fit_to_length(sorted_slice_locs, self.args.num_images, '<PAD>')
+        
+        if not self.args.use_all_images: 
+            sample['paths'] =  fit_to_length(sorted_img_paths, self.args.num_images )
+            sample['slice_locations'] = fit_to_length(sorted_slice_locs, self.args.num_images, '<PAD>')
         
         if self.args.use_annotations: 
             sample = self.get_ct_annotations(sample)
@@ -433,7 +435,13 @@ class NLST_Survival_Dataset(data.Dataset):
         sample = self.dataset[index]
         try:
             x, mask = self.input_loader.get_images(sample['paths'], sample['additionals'], sample)
-
+            
+            if self.args.use_all_images: 
+                c,n,h,w = x.shape
+                x = torch.nn.functional.interpolate(x.unsqueeze(0), (self._num_images, h, w))[0]
+                if mask is not None:
+                    mask = torch.nn.functional.interpolate(mask.unsqueeze(0), (self._num_images, h, w))[0]
+            
             item = {
                 'x': x,
                 'y': sample['y']
