@@ -310,6 +310,12 @@ def parse_args(args_strings=None):
         default=1.0,
         help="Lambda to weigh the primary loss.",
     )
+    parser.add_argument(
+        "--adv_loss_lambda",
+        type=float,
+        default=1.0,
+        help="Lambda to weigh the adversary loss.",
+    )
 
     # learning
     parser.add_argument(
@@ -348,6 +354,12 @@ def parse_args(args_strings=None):
         default=0,
         help="L2 Regularization penaty [default: 0]",
     )
+    parser.add_argument(
+        "--adv_lr",
+        type=float,
+        default=0.001,
+        help="Initial learning rate for adversary model [default: 0.001]",
+    )
 
     # schedule
     parser.add_argument(
@@ -355,6 +367,12 @@ def parse_args(args_strings=None):
         type=int,
         default=5,
         help="Number of epochs without improvement on dev before halving learning rate and reloading best model [default: 5]",
+    )
+    parser.add_argument(
+        "--num_adv_steps",
+        type=int,
+        default=1,
+        help="Number of steps for domain adaptation discriminator per one step of encoding model [default: 5]",
     )
     parser.add_argument(
         "--tuning_metric",
