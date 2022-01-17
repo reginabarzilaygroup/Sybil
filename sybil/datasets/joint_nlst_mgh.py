@@ -18,9 +18,8 @@ class MGH_NLST_Combined_Dataset(NLST_Survival_Dataset):
             only samples with the other. This allows you to evaluate on one dataset while using the alignment_ct lightning module.
     """
 
-    def __init__(self, args, augmentations, split_group):
-        self.augmentations = augmentations
-        super(MGH_NLST_Combined_Dataset, self).__init__(args, augmentations, split_group)
+    def __init__(self, args, split_group):
+        super(MGH_NLST_Combined_Dataset, self).__init__(args, split_group)
 
     def create_dataset(self, split_group, img_dir):
         """
@@ -34,31 +33,21 @@ class MGH_NLST_Combined_Dataset(NLST_Survival_Dataset):
         """
         dataset = []
 
-        if self.args.discard_from_combined_dataset != 'mgh':
-            mgh_args = copy(self.args)
-            mgh_args.dataset = 'mgh_lung_cancer_full_future'
-            mgh_dataset = MGH_Dataset(mgh_args, self.augmentations, split_group)
+        mgh_args = copy(self.args)
+        mgh_args.dataset_file_path = '/Mounts/rbg-storage1/datasets/MGH_Lung_Fintelmann/mgh_metadata.json'
+        mgh_dataset = MGH_Dataset(mgh_args, split_group)
 
-            for exam_dict in mgh_dataset.dataset:
-                exam_dict['origin_dataset'] = 0
+        for exam_dict in mgh_dataset.dataset:
+            exam_dict['origin_dataset'] = 0
+            dataset.append(exam_dict)
 
-                if self.args.balance_by_dataset:
-                    exam_dict['dist_key'] = 'mgh'
+        nlst_args = copy(self.args)
+        nlst_args.dataset_file_path = '/Mounts/rbg-storage1/datasets/NLST/full_nlst_google.json'
+        nlst_dataset = NLST_Survival_Dataset(nlst_args, split_group)
 
-                dataset.append(exam_dict)
-
-        if self.args.discard_from_combined_dataset != 'nlst':
-            nlst_args = copy(self.args)
-            nlst_args.dataset = 'nlst_google_full_future'
-            nlst_dataset = NLST_Survival_Dataset(nlst_args, self.augmentations, split_group)
-
-            for exam_dict in nlst_dataset.dataset:
-                exam_dict['origin_dataset'] = 1
-
-                if self.args.balance_by_dataset:
-                    exam_dict['dist_key'] = 'nlst'
-
-                dataset.append(exam_dict)
+        for exam_dict in nlst_dataset.dataset:
+            exam_dict['origin_dataset'] = 1
+            dataset.append(exam_dict)
 
         return dataset
     

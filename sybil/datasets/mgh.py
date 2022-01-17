@@ -3,6 +3,7 @@ from tqdm import tqdm
 from ast import literal_eval
 from sybil.datasets.nlst import NLST_Survival_Dataset
 from collections import Counter
+from sybil.datasets.utils import fit_to_length, get_scaled_annotation_area
 
 DEVICE_ID = {
     'GE MEDICAL SYSTEMS': 0,
@@ -33,8 +34,8 @@ class MGH_Dataset(NLST_Survival_Dataset):
         dataset = []
         
         # if split probs is set, randomly assign new splits, (otherwise default is 70% train, 15% dev and 15% test)
-        if self.args.split_probs is not None:
-            np.random.seed(self.args.split_seed)
+        if self.args.assign_splits:
+            np.random.seed(self.args.cross_val_seed)
             self.assign_splits(self.metadata_json)
         
         for mrn_row in tqdm(self.metadata_json):
@@ -76,11 +77,9 @@ class MGH_Dataset(NLST_Survival_Dataset):
                     sorted_img_paths = [x for _, x in sorted(zip(slice_locations, img_paths), key=lambda pair: pair[0], reverse=True)]   
                     sorted_slice_locs = sorted(slice_locations, reverse=True)
 
-                    # exam_dict unused fields: StudyDescription, pn_*, dicom_*, c_*, studyuid_pn_dicom, seriesuid_pn_dicom, patient_ID, 
-                    #                          studyinstance_uid, seriesinstance_uid, study_series, patient_location, exam_description, download, comment_AT
-
                     sample = {
-                        'paths': self.fit_to_length(sorted_img_paths, self.PAD_PATH, self.args.num_images, truncate_method = self.args.truncation_method, pad_method = self.args.padding_method),
+                        'paths': sorted_img_paths,
+                        'slice_locations': sorted_slice_locs,
                         'y': int(y),
                         'time_at_event': time_at_event,
                         'y_seq': y_seq,
@@ -92,7 +91,6 @@ class MGH_Dataset(NLST_Survival_Dataset):
                         'series': series_id,
                         'pid': pid,
                         'device': device,
-                        'slice_locations': self.fit_to_length(sorted_slice_locs, '<PAD>', self.args.num_images, truncate_method = self.args.truncation_method, pad_method = self.args.padding_method),
                         'lung_rads': -1 if exam_dict['lung_rads'] == np.nan else exam_dict['lung_rads'],
                         'IV_contrast': exam_dict['IV_contrast'],
                         'lung_cancer_screening': exam_dict['lung_cancer_screening'],
@@ -101,6 +99,10 @@ class MGH_Dataset(NLST_Survival_Dataset):
                         'num_original_slices': len(series_dict['paths']),
                         'additionals': []
                     }
+                    
+                    if not self.args.use_all_images: 
+                        sample['paths'] =  fit_to_length(sorted_img_paths, self.args.num_images )
+                        sample['slice_locations'] = fit_to_length(sorted_slice_locs, self.args.num_images, '<PAD>')
 
                     if self.args.use_risk_factors:
                         sample['risk_factors'] = self.get_risk_factors(exam_dict, return_dict = False)
@@ -109,7 +111,7 @@ class MGH_Dataset(NLST_Survival_Dataset):
                         # mgh has no annotations, so set everything to zero / false
                         sample['volume_annotations'] = np.array([ 0 for _ in sample['paths'] ])
                         sample['additionals'] = [ {'image_annotations': None } for path in sample['paths'] ]
-                        sample['annotation_areas'] = self.get_scaled_annotation_area(sample)
+                        sample['annotation_areas'] = get_scaled_annotation_area(sample,self.args)
                         sample['has_annotation'] = np.sum(sample['volume_annotations']) > 0
                         sample['use_manual_annotation'] = sample['has_annotation'] and sample['series'] in self.annotations_metadata
 

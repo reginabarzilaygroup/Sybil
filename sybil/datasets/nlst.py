@@ -22,7 +22,8 @@ CORRUPTED_PATHS = '/Mounts/rbg-storage1/datasets/NLST/corrupted_img_paths.pkl'
 CT_ITEM_KEYS = [
     'pid', 'exam', 'series', 'y_seq', 'y_mask', 'time_at_event',
     'cancer_laterality', 
-    'has_annotation', 'volume_annotations','annotation_areas'
+    'has_annotation', 'volume_annotations','annotation_areas',
+    'origin_dataset'
     ]
 
 RACE_ID_KEYS = {
@@ -219,6 +220,8 @@ class NLST_Survival_Dataset(data.Dataset):
         
         exam_int = int('{}{}{}'.format(int(pid), int(screen_timepoint), int(series_id.split('.')[-1][-3:] ) ) ) 
         sample = {
+            'paths': sorted_img_paths,
+            'slice_locations': sorted_slice_locs,
             'y': int(y),
             'time_at_event': time_at_event,
             'y_seq': y_seq,
@@ -248,8 +251,6 @@ class NLST_Survival_Dataset(data.Dataset):
             sample = self.get_ct_annotations(sample)
             sample['annotation_areas'] = get_scaled_annotation_area(sample, self.args)
             sample['has_annotation'] = np.sum(sample['volume_annotations']) > 0
-
-        sample['slice_ids'] = [os.path.splitext(os.path.basename(path))[0] for path in sample['paths'] ]
 
         return sample 
 
@@ -455,7 +456,6 @@ class NLST_Survival_Dataset(data.Dataset):
                 mask_area[mask_area==0] = 1
                 mask = mask/mask_area
                 item['image_annotations'] = mask
-                item['slice_ids'] = sample['slice_ids']
             
             if self.args.use_risk_factors:
                 item['risk_factors'] = sample['risk_factors']
