@@ -183,6 +183,7 @@ class abstract_loader:
         if image_path == self.pad_token:
             shape = (self.args.num_chan, self.args.img_size[0], self.args.img_size[1] )
             image = torch.zeros(*shape)
+            mask = torch.from_numpy(mask).unsqueeze(0) if self.args.use_annotations else None
             return image, mask
 
         if not self.use_cache:
