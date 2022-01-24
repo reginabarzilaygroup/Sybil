@@ -9,7 +9,6 @@ class MGH_NLST_Combined_Dataset(NLST_Survival_Dataset):
     MGH and NLST Combined.
 
     Notes:
-        - args.img_dir is only used by NLST, and should be set to the top-level directory of the NLST images.
         - args.metadata_path must be a folder that contains both the MGH and NLST metadata (under two seperate folders).
 
     Options:
@@ -21,12 +20,11 @@ class MGH_NLST_Combined_Dataset(NLST_Survival_Dataset):
     def __init__(self, args, split_group):
         super(MGH_NLST_Combined_Dataset, self).__init__(args, split_group)
 
-    def create_dataset(self, split_group, img_dir):
+    def create_dataset(self, split_group):
         """
         Gets the dataset from the paths and labels in the json.
         Arguments:
             split_group(str): One of ['train'|'dev'|'test'].
-            img_dir(str): The path to the directory containing the images.
         Returns:
             The dataset as a dictionary with img paths, label, 
             and additional information regarding exam or participant

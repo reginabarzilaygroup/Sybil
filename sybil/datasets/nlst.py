@@ -81,7 +81,7 @@ class NLST_Survival_Dataset(data.Dataset):
             assert self.args.region_annotations_filepath, 'ANNOTATIONS METADATA FILE NOT SPECIFIED'
             self.annotations_metadata = json.load(open(self.args.region_annotations_filepath, 'r'))
             
-        self.dataset = self.create_dataset(split_group, args.img_dir)
+        self.dataset = self.create_dataset(split_group)
         if len(self.dataset) == 0:
             return
         
@@ -99,12 +99,11 @@ class NLST_Survival_Dataset(data.Dataset):
         print("Label weights are {}".format(label_weights))
         self.weights = [ label_weights[d[dist_key]] for d in self.dataset]
  
-    def create_dataset(self, split_group, img_dir):
+    def create_dataset(self, split_group):
         """
         Gets the dataset from the paths and labels in the json.
         Arguments:
             split_group(str): One of ['train'|'dev'|'test'].
-            img_dir(str): The path to the directory containing the images.
         Returns:
             The dataset as a dictionary with img paths, label, 
             and additional information regarding exam or participant
