@@ -51,7 +51,7 @@ python scripts/train_jointly.py \
     --max_followup 6 \
     --img_file_type png \
     --min_num_images 0 \
-    --num_images 100 \
+    --num_images 200 \
     --use_only_thin_cuts_for_ct \
     --use_annotations \
     --region_annotations_filepath /path/to/annot_dir/annotations_122020.json \
@@ -73,8 +73,9 @@ python scripts/train_jointly.py \
     --num_workers 0 \
     --profiler simple \
     --num_sanity_val_steps 0 \
-    --num_adv_steps 2 \
-    --adv_lr 0.001 \
+    --num_adv_steps 3 \
+    --adv_lr 3e-4 \
+    --adv_loss_lambda 0.75 \
     --save_dir /path/to/model_dir/sybil1 \
     --img_dir /path/to/img_dir/nlst-ct-png \
     --results_path /path/to/results_dir/sybil.results \
