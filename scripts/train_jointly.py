@@ -204,7 +204,40 @@ def train(args):
     print("Saving args to {}".format(args.results_path))
     pickle.dump(vars(args), open(args.results_path, "wb"))
 
+def test(args):
+    
+    trainer = pl.Trainer.from_argparse_args(args)
+    # Remove callbacks from args for safe pickling later
+    args.callbacks = None
+    args.num_nodes = trainer.num_nodes
+    args.num_processes = trainer.num_processes
+    args.world_size = args.num_nodes * args.num_processes
+    args.global_rank = trainer.global_rank
+    args.local_rank = trainer.local_rank
+
+    train_dataset = loaders.get_train_dataset_loader(
+        args, get_dataset(args.dataset, "train", args)
+    )
+    test_dataset = loaders.get_eval_dataset_loader(
+        args, get_dataset(args.dataset, "test", args), False
+    )
+
+    args.censoring_distribution = metrics.get_censoring_dist(train_dataset.dataset)
+    module = SybilLightningAdapt(args)
+    module = module.load_from_checkpoint(checkpoint_path= args.snapshot)
+
+    # print args
+    for key, value in sorted(vars(args).items()):
+        print("{} -- {}".format(key.upper(), value))
+
+    trainer.test(module, test_dataset)
+
+    print("Saving args to {}".format(args.results_path))
+    pickle.dump(vars(args), open(args.results_path, "wb"))
 
 if __name__ == "__main__":
     args = parse_args()
-    train(args)
+    if args.train:
+        train(args)
+    elif args.test:
+        test(args)
