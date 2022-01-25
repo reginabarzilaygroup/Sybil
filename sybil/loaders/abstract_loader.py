@@ -217,7 +217,8 @@ class abstract_loader:
                 except Exception as e:
                     print(e)
                     hashed_key = md5(image_path)
-                    corrupted_file = self.cache._file_path(key, hashed_key)
+                    par_dir = self.cache._parent_dir(image_path)
+                    corrupted_file = self.cache._file_path(key, par_dir, hashed_key)
                     warnings.warn(CORUPTED_FILE_ERR.format(sys.exc_info()[0]))
                     self.cache.rem(image_path, key)
         all_augmentations = self.split_augmentations[-1][1]
