@@ -111,7 +111,7 @@ class NLST_Survival_Dataset(data.Dataset):
         """
         self.corrupted_paths = self.CORRUPTED_PATHS['paths']
         self.corrupted_series = self.CORRUPTED_PATHS['series']
-        self.risk_factor_vectorizer = NLSTRiskFactorVectorizer(self.args)
+        #self.risk_factor_vectorizer = NLSTRiskFactorVectorizer(self.args)
         
         if self.args.assign_splits:
             np.random.seed(self.args.cross_val_seed)
@@ -441,9 +441,9 @@ class NLST_Survival_Dataset(data.Dataset):
             
             if self.args.use_all_images: 
                 c,n,h,w = x.shape
-                x = torch.nn.functional.interpolate(x.unsqueeze(0), (self._num_images, h, w))[0]
+                x = torch.nn.functional.interpolate(x.unsqueeze(0), (self._num_images, h, w), align_corners=True)[0]
                 if mask is not None:
-                    mask = torch.nn.functional.interpolate(mask.unsqueeze(0), (self._num_images, h, w))[0]
+                    mask = torch.nn.functional.interpolate(mask.unsqueeze(0), (self._num_images, h, w), align_corners=True)[0]
             
             if self.args.use_annotations:
                 #item['mask'] = mask
@@ -455,9 +455,9 @@ class NLST_Survival_Dataset(data.Dataset):
                 item['image_annotations'] = mask
                 if self.args.use_all_images: 
                     t = torch.from_numpy(sample['annotation_areas'])
-                    item['annotation_areas'] =  F.interpolate(t[None,None], (self._num_images), mode= 'linear')[0,0]
+                    item['annotation_areas'] =  F.interpolate(t[None,None], (self._num_images), mode= 'linear', align_corners=True)[0,0]
                     t = torch.from_numpy(sample['volume_annotations']).float()
-                    item['volume_annotations'] = F.interpolate(t[None,None], (self._num_images), mode= 'linear')[0,0]
+                    item['volume_annotations'] = F.interpolate(t[None,None], (self._num_images), mode= 'linear', align_corners=True)[0,0]
                 else:
                     item['annotation_areas'] = sample['annotation_areas']
                     item['volume_annotations'] = sample['volume_annotations']
