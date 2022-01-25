@@ -7,6 +7,7 @@ import sys
 import pytorch_lightning as pl
 import torch
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from sybil.utils.helpers import get_dataset
 import sybil.utils.losses as losses
 import sybil.utils.metrics as metrics
@@ -14,7 +15,6 @@ import sybil.utils.loading as loaders
 import sybil.models.sybil as model
 from sybil.parsing import parse_args
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 
 class SybilLightning(pl.LightningModule):
@@ -97,7 +97,7 @@ class SybilLightning(pl.LightningModule):
         logging_dict["val_loss"] = loss.detach()
         self.log_dict(logging_dict, prog_bar=True, sync_dist=True)
         result["logs"] = logging_dict
-        if self.args.strategy == "ddp":
+        if self.args.accelerator == "ddp":
             predictions_dict = gather_predictions_dict(predictions_dict)
         self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
         result.update(predictions_dict)
@@ -111,7 +111,7 @@ class SybilLightning(pl.LightningModule):
         logging_dict["{}_loss".format(self.save_prefix)] = loss.detach()
         result["logs"] = logging_dict
 
-        if self.args.strategy == "ddp":
+        if self.args.accelerator == "ddp":
             predictions_dict = gather_predictions_dict(predictions_dict)
 
         self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)

@@ -90,7 +90,7 @@ def get_train_dataset_loader(args, train_data):
     train_data_loader: iterator that returns batches
     dev_data_loader: iterator that returns batches
     """
-    if args.strategy == "ddp":
+    if args.accelerator == "ddp":
         sampler = DistributedWeightedSampler(
             train_data,
             weights=train_data.weights,
@@ -117,7 +117,7 @@ def get_train_dataset_loader(args, train_data):
 
 def get_eval_dataset_loader(args, eval_data, shuffle):
 
-    if args.strategy == "ddp":
+    if args.accelerator == "ddp":
         sampler = torch.utils.data.distributed.DistributedSampler(
             eval_data,
             shuffle=shuffle,
