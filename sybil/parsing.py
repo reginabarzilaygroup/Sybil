@@ -462,10 +462,10 @@ def parse_args(args_strings=None):
     if (isinstance(args.gpus, str) and len(args.gpus.split(",")) > 1) or (
         isinstance(args.gpus, int) and args.gpus > 1
     ):
-        args.strategy = "ddp"
+        args.accelerator = "ddp"
         args.replace_sampler_ddp = False
     else:
-        args.strategy = None
+        args.accelerator = None
         args.replace_sampler_ddp = False
 
     args.unix_username = pwd.getpwuid(os.getuid())[0]
