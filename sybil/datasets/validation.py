@@ -8,26 +8,23 @@ from collections import Counter
 from sybil.augmentations import get_augmentations
 from tqdm import tqdm 
 from sybil.serie import Serie
-from sybil.datasets.utils import order_slices, fit_to_length, IMG_PAD_TOKEN, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
+from sybil.datasets.utils import order_slices, METAFILE_NOTFOUND_ERR, LOAD_FAIL_MSG
 from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader 
 
 
 
-class SybilDataset(data.Dataset):
+class CSVDataset(data.Dataset):
     """
-    Abstract Object for all Datasets. All datasets have some metadata
-    property associated with them, a create_dataset method, a task, and a check
-    label and get label function.
+    Dataset used for large validations
     """
     def __init__(self, args, split_group):
         '''
         params: args - config.
-        params: transformer - A transformer object, takes in a PIL image, performs some transforms and returns a Tensor
         params: split_group - ['train'|'dev'|'test'].
 
         constructs: standard pytorch Dataset obj, which can be fed in a DataLoader for batching
         '''
-        super(SybilDataset, self).__init__()
+        super(CSVDataset, self).__init__()
         
         self.split_group = split_group
         self.args = args
@@ -45,7 +42,7 @@ class SybilDataset(data.Dataset):
         else:
             self.input_loader = OpenCVLoader(args.cache_path, augmentations, args)
             
-        self.dataset = self.create_dataset(split_group, args.img_dir)
+        self.dataset = self.create_dataset(split_group)
         if len(self.dataset) == 0:
             return
         
@@ -136,31 +133,26 @@ class SybilDataset(data.Dataset):
         for mrn_row in tqdm(self.dataset_dicts, position = 0):
             
             label = mrn_row['ever_has_future_cancer']
-            censor_time = 1
-            
-            series_object = Serie(paths, label, censor_time)
-            
+            censor_time = mrn_row['years_to_cancer'] if label else mrn_row['years_to_last_negative_followup']    
+            paths = order_slices(mrn_row['paths'], mrn_row['slice_locations'])
+            try:
+                series_object = Serie(
+                    paths, 
+                    label, 
+                    censor_time,
+                    self.args.img_file_type,
+                    mrn_row['split']
+                    )
+            except Exception:
+                continue 
+
             if self.skip_sample(series_object, mrn_row, split_group):
                 continue
             
-            # put in right order and fit to max length
-            paths = order_slices(mrn_row['paths'], mrn_row['slice_locations'])
-            paths = fit_to_length(paths, self.num_images)
-            # obtain labels
-            labels = series_object.get_processed_label(self._max_followup)
-
-            sample = {
-                'x': paths,
-                'series': series_object,
-                'y': labels.y,
-                'y_seq': labels.y_seq,
-                'y_mask': labels.y_mask,
-                'time_at_event': labels.censor_time,
-                'exam': mrn_row['unique_id'],
-                'patient_id': mrn_row['patient_id']
-            }
-
-            dataset.append(sample)
+            dataset.append({
+                'serie': series_object,
+                'exam': mrn_row['unique_id']
+                })
 
         return dataset
 
@@ -172,10 +164,6 @@ class SybilDataset(data.Dataset):
             return True
         
         return False
-    
-    @property
-    def PAD_PATH(self):
-        return IMG_PAD_TOKEN
 
     def get_summary_statement(self, dataset, split_group):
         summary = "Contructed Sybil Cancer Risk {} dataset with {} records, {} exams, {} patients, and the following class balance \n {}"
@@ -191,19 +179,17 @@ class SybilDataset(data.Dataset):
 
     def __getitem__(self, index):
         sample = self.dataset[index]
+        serie = sample['serie']
         try:
-            x, mask = self.input_loader.get_images(sample['paths'], sample['additionals'], sample)
-            
+            labels = serie.get_label()
             item = {
-                'x': x,
-                'y': sample['y'],
-                'y_seq': sample['y_seq'],
-                'y_mask': sample['y_mask'],
-                'time_at_event': sample['time_at_event'],
+                'x': serie.get_volume(),
+                'y': labels.y,
+                'y_seq': labels.y_seq,
+                'y_mask': labels.y_mask,
+                'time_at_event': labels.censor_time,
                 'exam': sample['exam']
-                }
-
-
+            }
             return item
         except Exception:
             warnings.warn(LOAD_FAIL_MSG.format(sample['paths'], traceback.print_exc()))  

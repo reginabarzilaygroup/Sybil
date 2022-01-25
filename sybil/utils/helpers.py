@@ -1,10 +1,10 @@
-from sybil.datasets.sybil import SybilDataset
+from sybil.datasets.validation import CSVDataset
 from sybil.datasets.nlst import *
 from sybil.datasets.mgh import MGH_Dataset
 from sybil.datasets.joint_nlst_mgh import MGH_NLST_Combined_Dataset
 
 SUPPORTED_DATASETS = {
-    'sybil': SybilDataset,
+    'validation': CSVDataset,
     'nlst': NLST_Survival_Dataset,
     'nlst_risk_factors': NLST_Risk_Factor_Task,
     'nlst_for_plco': NLST_for_PLCO,
