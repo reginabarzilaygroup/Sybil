@@ -29,15 +29,13 @@ def fit_to_length(arr, max_length,  pad_token = IMG_PAD_TOKEN):
         return arr
 
 def truncate(arr, max_length):    
-    start_idx = (len(arr) - max_length + 1) // 2
-    arr = arr[start_idx : start_idx + max_length]
+    include_ids = np.round(np.linspace(0, len(arr) - 1, max_length)).astype(int)
+    arr = [elt for idx, elt in enumerate(arr) if idx in include_ids]
     return arr
 
 def pad(arr, pad_token, max_length):
     num_pad_tokens = max_length - len(arr)
-    pad_ids = np.round(np.linspace(0, max_length - 1, num_pad_tokens)).astype(int)
-    for idx in pad_ids:
-        arr.insert(idx, pad_token)
+    arr = [pad_token] * ((num_pad_tokens + 1) // 2) + arr + [pad_token] * ((num_pad_tokens) // 2)
     return arr
 
 def get_scaled_annotation_mask(additional, args, scale_annotation=True):
