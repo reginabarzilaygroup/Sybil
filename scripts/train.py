@@ -106,7 +106,7 @@ class SybilLightning(pl.LightningModule):
     def test_step(self, batch, batch_idx, optimizer_idx=None):
         result = OrderedDict()
         loss, logging_dict, predictions_dict, model_output = self.step(
-            batch, batch_idx, optimizer_idx, log_key_prefix=self.save_prefix
+            batch, batch_idx, optimizer_idx, log_key_prefix="test_"
         )
         logging_dict["{}_loss".format(self.save_prefix)] = loss.detach()
         result["logs"] = logging_dict
@@ -144,11 +144,12 @@ class SybilLightning(pl.LightningModule):
         self.log_dict(epoch_metrics, prog_bar=True, logger=True)
 
     def test_epoch_end(self, outputs):
+        self.save_prefix= 'test'
         if len(outputs) == 0:
             return
         outputs = gather_step_outputs(outputs)
         epoch_metrics = compute_epoch_metrics(
-            self._list_of_metrics, outputs, self.args, self.device, key_prefix=self.save_prefix
+            self._list_of_metrics, outputs, self.args, self.device, key_prefix="test_"
         )
 
         for k, v in outputs["logs"].items():
@@ -368,8 +369,12 @@ def train(args):
     for key, value in sorted(vars(args).items()):
         print("{} -- {}".format(key.upper(), value))
 
+    if args.snapshot is not None:
+        module = module.load_from_checkpoint(checkpoint_path= args.snapshot, strict=False)
+        module.args = args
+    
     trainer.fit(module, train_dataset, dev_dataset)
-
+    args.model_path = trainer.checkpoint_callback.best_model_path
     print("Saving args to {}".format(args.results_path))
     pickle.dump(vars(args), open(args.results_path, "wb"))
 
@@ -392,7 +397,8 @@ def test(args):
 
     args.censoring_distribution = metrics.get_censoring_dist(train_dataset.dataset)
     module = SybilLightning(args)
-    module = module.load_from_checkpoint(checkpoint_path= args.snapshot)
+    module = module.load_from_checkpoint(checkpoint_path= args.snapshot, strict=False)
+    module.args = args
 
     # print args
     for key, value in sorted(vars(args).items()):
