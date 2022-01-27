@@ -200,6 +200,7 @@ def train(args):
         print("{} -- {}".format(key.upper(), value))
 
     trainer.fit(module, train_dataset, dev_dataset)
+    args.model_path = trainer.checkpoint_callback.best_model_path
 
     print("Saving args to {}".format(args.results_path))
     pickle.dump(vars(args), open(args.results_path, "wb"))
@@ -225,6 +226,7 @@ def test(args):
     args.censoring_distribution = metrics.get_censoring_dist(train_dataset.dataset)
     module = SybilLightningAdapt(args)
     module = module.load_from_checkpoint(checkpoint_path= args.snapshot)
+    module.args = args
 
     # print args
     for key, value in sorted(vars(args).items()):
