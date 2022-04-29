@@ -15,9 +15,9 @@ from sybil.utils.loading import get_sample_loader
 from sybil.datasets.utils import (
     METAFILE_NOTFOUND_ERR,
     LOAD_FAIL_MSG,
+    VOXEL_SPACING,
 )
 import copy
-
 from sybil.datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
 
 METADATA_FILENAME = {"google_test": "NLST/full_nlst_google.json"}
@@ -87,7 +87,7 @@ class NLST_Survival_Dataset(data.Dataset):
         self.always_resample_pixel_spacing = split_group in ["dev", "test"]
         
         self.resample_transform = tio.transforms.Resample(
-            target=tuple(args.ct_pixel_spacing)
+            target=VOXEL_SPACING
         )
         self.padding_transform = tio.transforms.CropOrPad(
             target_shape=tuple(args.img_size + [args.num_images]), padding_mode=0
