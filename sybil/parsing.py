@@ -133,7 +133,13 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--dataset",
         default="nlst",
-        choices=["sybil", "nlst", "nlst_risk_factors", "nlst_for_plco", "mgh", "nlst_mgh"],
+        choices=[
+            "sybil",
+            "nlst",
+            "nlst_risk_factors",
+            "nlst_for_plco2012",
+            "nlst_for_plco2019" "mgh",
+        ],
         help="Name of dataset from dataset factory to use [default: nlst]",
     )
     parser.add_argument(
@@ -238,10 +244,10 @@ def parse_args(args_strings=None):
 
     # handling CT slices
     parser.add_argument(
-        "--use_all_images",
-        action='store_true',
-        default=False,
-        help="Whether to use all slices as input. In which case, the num_images arg is used to interpolate volumes to constant depth",
+        "--resample_pixel_spacing_prob",
+        type=float,
+        default=1,
+        help="Probability of resampling pixel spacing into fixed dimensions. 1 when eval and using resampling",
     )
     parser.add_argument(
         "--num_images",
@@ -259,12 +265,6 @@ def parse_args(args_strings=None):
         "--slice_thickness_filter",
         type=float,
         help="Slice thickness using, if restricting to specific thickness value.",
-    )
-    parser.add_argument(
-        "--cross_section_filter",
-        type=str,
-        nargs="*",
-        help="Restrict to using specific cross sections [transverse, coronal, sagittal, oblique].",
     )
     parser.add_argument(
         "--use_only_thin_cuts_for_ct",
@@ -302,7 +302,7 @@ def parse_args(args_strings=None):
         default=1,
         help="Weight of loss for predicting volume attention scores",
     )
-    
+
     # regularization
     parser.add_argument(
         "--primary_loss_lambda",
