@@ -7,26 +7,27 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import random
 
-ROTATE_DEGREES = {'min': -20, 'max': 20}
 
-def get_augmentations(split: Literal['train', 'dev', 'test'], args):
-    if split == 'train':
+def get_augmentations(split: Literal["train", "dev", "test"], args):
+    if split == "train":
         augmentations = [
-            Scale_2d(args, {}), 
-            Rotate_Range(args, ROTATE_DEGREES), 
+            Scale_2d(args, {}),
+            Rotate_Range(args, {"deg": 20}),
             ToTensor(),
-            Force_Num_Chan_Tensor_2d(args, {}), 
-            Normalize_Tensor_2d(args, {})
-            ]
+            Force_Num_Chan_Tensor_2d(args, {}),
+            Normalize_Tensor_2d(args, {}),
+        ]
     else:
         augmentations = [
-            Scale_2d(args, {}), 
+            Scale_2d(args, {}),
             ToTensor(),
-            Force_Num_Chan_Tensor_2d(args, {}), 
-            Normalize_Tensor_2d(args, {})]
-    
-    return augmentations 
-  
+            Force_Num_Chan_Tensor_2d(args, {}),
+            Normalize_Tensor_2d(args, {}),
+        ]
+
+    return augmentations
+
+
 class Abstract_augmentation(object):
     """
     Abstract-transformer.
@@ -37,9 +38,11 @@ class Abstract_augmentation(object):
 
     def __init__(self):
         self._is_cachable = False
-        self._trans_sep = '@' 
-        self._attr_sep = '#'
-        self.name = self.__str__().split('sybil.augmentations.')[-1].split(' ')[0].lower()
+        self._trans_sep = "@"
+        self._attr_sep = "#"
+        self.name = (
+            self.__str__().split("sybil.augmentations.")[-1].split(" ")[0].lower()
+        )
 
     @abstractmethod
     def __call__(self, img, mask=None, additional=None):
@@ -54,33 +57,35 @@ class Abstract_augmentation(object):
         return self._is_cachable
 
     def set_cachable(self, *keys):
-        '''
+        """
         Sets the transformer as cachable
         and sets the _caching_keys according to the input variables.
-        '''
+        """
         self._is_cachable = True
-        name_str = '{}{}'.format(self._trans_sep, self.name)
-        keys_str = ''.join(self._attr_sep + str(k) for k in keys)
-        self._caching_keys = '{}{}'.format(name_str, keys_str)
+        name_str = "{}{}".format(self._trans_sep, self.name)
+        keys_str = "".join(self._attr_sep + str(k) for k in keys)
+        self._caching_keys = "{}{}".format(name_str, keys_str)
         return
 
     def caching_keys(self):
         return self._caching_keys
 
+
 class ComposeAug(Abstract_augmentation):
     """
-    composes multiple augmentations
+    Composes multiple augmentations
     """
 
     def __init__(self, augmentations):
         super(ComposeAug, self).__init__()
         self.augmentations = augmentations
 
-    def __call__(self, img, mask=None, additional=None):
+    def __call__(self, input_dict, sample=None):
         for transformer in self.augmentations:
-            img, mask = transformer(img, mask, additional)
+            input_dict = transformer(input_dict, sample)
 
-        return img, mask
+        return input_dict
+
 
 class ToTensor(Abstract_augmentation):
     """
@@ -92,15 +97,17 @@ class ToTensor(Abstract_augmentation):
         self.transform = ToTensorV2()
         self.name = "totensor"
 
-    def __call__(self, img, mask=None, additional=None):
-        if mask is None:
-            return torch.from_numpy(img).float(), mask
-        return torch.from_numpy(img).float(), torch.from_numpy(mask)
+    def __call__(self, input_dict, sample=None):
+        input_dict["input"] = torch.from_numpy(input_dict["input"]).float()
+        if input_dict.get("mask", None) is not None:
+            input_dict["mask"] = torch.from_numpy(input_dict["mask"]).float()
+        return input_dict
+
 
 class Scale_2d(Abstract_augmentation):
     """
-        Given PIL image, enforce its some set size
-        (can use for down sampling / keep full res)
+    Given PIL image, enforce its some set size
+    (can use for down sampling / keep full res)
     """
 
     def __init__(self, args, kwargs):
@@ -110,34 +117,44 @@ class Scale_2d(Abstract_augmentation):
         self.set_cachable(width, height)
         self.transform = A.Resize(height, width)
 
-    def __call__(self, img, mask=None, additional=None):
-        out = self.transform(image=img, mask=mask)
-        return out["image"], out["mask"]
+    def __call__(self, input_dict, sample=None):
+        out = self.transform(
+            image=input_dict["input"], mask=input_dict.get("mask", None)
+        )
+        input_dict["input"] = out["image"]
+        input_dict["mask"] = out["mask"]
+        return input_dict
+
 
 class Rotate_Range(Abstract_augmentation):
     """
-    Rotate image counter clockwise by random
-    kwargs['min'] - kwargs['max'] degrees.
+    Rotate image counter clockwise by random degree https://albumentations.ai/docs/api_reference/augmentations/geometric/rotate/#albumentations.augmentations.geometric.rotate.Rotate
 
-    Example: 'rotate/min=-20/max=20' will rotate by up to +/-20 deg
+        kwargs
+            deg: max degrees to rotate
     """
 
     def __init__(self, args, kwargs):
         super(Rotate_Range, self).__init__()
-        assert len(kwargs.keys()) == 2
-        self.max_angle = int(kwargs["max"])
-        self.min_angle = int(kwargs["min"])
+        assert len(kwargs.keys()) == 1
+        self.max_angle = int(kwargs["deg"])
         self.transform = A.Rotate(limit=self.max_angle, p=0.5)
 
-    def __call__(self, img, mask=None, additional=None):
-        if additional is not None and "seed" in additional:
-            self.set_seed(additional["seed"])
-        out = self.transform(image=img, mask=mask)
-        return out["image"], out["mask"]
-    
+    def __call__(self, input_dict, sample=None):
+        if "seed" in sample:
+            self.set_seed(sample["seed"])
+        out = self.transform(
+            image=input_dict["input"], mask=input_dict.get("mask", None)
+        )
+        input_dict["input"] = out["image"]
+        input_dict["mask"] = out["mask"]
+        return input_dict
+
+
 class Normalize_Tensor_2d(Abstract_augmentation):
     """
-    torchvision.transforms.Normalize wrapper.
+    Normalizes input by channel
+    wrapper for torchvision.transforms.Normalize wrapper.
     """
 
     def __init__(self, args, kwargs):
@@ -150,12 +167,24 @@ class Normalize_Tensor_2d(Abstract_augmentation):
             torch.Tensor(channel_means), torch.Tensor(channel_stds)
         )
 
+        self.permute = args.img_file_type in [
+            "png",
+        ]
 
-    def __call__(self, img, mask=None, additional=None):
+    def __call__(self, input_dict, sample=None):
+        img = input_dict["input"]
         if len(img.size()) == 2:
             img = img.unsqueeze(0)
-        return self.transform(img), mask
-    
+
+        if self.permute:
+            img = img.permute(2, 0, 1)
+            input_dict["input"] = self.transform(img).permute(1, 2, 0)
+        else:
+            input_dict["input"] = self.transform(img)
+
+        return input_dict
+
+
 class Force_Num_Chan_Tensor_2d(Abstract_augmentation):
     """
     Convert gray scale images to image with args.num_chan num channels.
@@ -166,13 +195,17 @@ class Force_Num_Chan_Tensor_2d(Abstract_augmentation):
         assert len(kwargs) == 0
         self.args = args
 
-    def __call__(self, img, mask=None, additional=None):
+    def __call__(self, input_dict, sample=None):
+        img = input_dict["input"]
+        mask = input_dict.get("mask", None)
         if mask is not None:
-            mask = mask.unsqueeze(0)
+            input_dict["mask"] = mask.unsqueeze(0)
+
         num_dims = len(img.shape)
         if num_dims == 2:
             img = img.unsqueeze(0)
         existing_chan = img.size()[0]
         if not existing_chan == self.args.num_chan:
-            return img.expand(self.args.num_chan, *img.size()[1:]), mask
-        return img, mask
+            input_dict["input"] = img.expand(self.args.num_chan, *img.size()[1:])
+
+        return input_dict

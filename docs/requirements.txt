@@ -19,3 +19,4 @@ albumentations==1.1.0
 pydicom==2.2.2
 # logging
 #comet-ml
+torchio
