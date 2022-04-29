@@ -7,6 +7,7 @@ import sys
 import pytorch_lightning as pl
 import torch
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from sybil.utils.helpers import get_dataset
 import sybil.utils.losses as losses
 import sybil.utils.metrics as metrics
@@ -14,7 +15,6 @@ import sybil.utils.loading as loaders
 import sybil.models.sybil as model
 from sybil.parsing import parse_args
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 
 class SybilLightning(pl.LightningModule):
@@ -37,6 +37,11 @@ class SybilLightning(pl.LightningModule):
         self.model = model.SybilNet(args)
         self.save_prefix = "default"
         self.save_hyperparameters(args)
+        self._list_of_metrics = [
+            metrics.get_classification_metrics,
+            metrics.get_survival_metrics,
+            metrics.get_risk_metrics
+        ]
 
     def set_finetune(self, finetune_flag):
         return
@@ -92,7 +97,7 @@ class SybilLightning(pl.LightningModule):
         logging_dict["val_loss"] = loss.detach()
         self.log_dict(logging_dict, prog_bar=True, sync_dist=True)
         result["logs"] = logging_dict
-        if self.args.strategy == "ddp":
+        if self.args.accelerator == "ddp":
             predictions_dict = gather_predictions_dict(predictions_dict)
         self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
         result.update(predictions_dict)
@@ -101,12 +106,12 @@ class SybilLightning(pl.LightningModule):
     def test_step(self, batch, batch_idx, optimizer_idx=None):
         result = OrderedDict()
         loss, logging_dict, predictions_dict, model_output = self.step(
-            batch, batch_idx, optimizer_idx, log_key_prefix=self.save_prefix
+            batch, batch_idx, optimizer_idx, log_key_prefix="test_"
         )
         logging_dict["{}_loss".format(self.save_prefix)] = loss.detach()
         result["logs"] = logging_dict
 
-        if self.args.strategy == "ddp":
+        if self.args.accelerator == "ddp":
             predictions_dict = gather_predictions_dict(predictions_dict)
 
         self.log_tensor_dict(predictions_dict, prog_bar=False, logger=False)
@@ -121,7 +126,7 @@ class SybilLightning(pl.LightningModule):
         # and logging twice creates issue
         del outputs["loss"]
         epoch_metrics = compute_epoch_metrics(
-            outputs, self.args, self.device, key_prefix="train_"
+            self._list_of_metrics, outputs, self.args, self.device, key_prefix="train_"
         )
         for k, v in outputs["logs"].items():
             epoch_metrics[k] = v.mean()
@@ -132,18 +137,19 @@ class SybilLightning(pl.LightningModule):
             return
         outputs = gather_step_outputs(outputs)
         epoch_metrics = compute_epoch_metrics(
-            outputs, self.args, self.device, key_prefix="val_"
+            self._list_of_metrics, outputs, self.args, self.device, key_prefix="val_"
         )
         for k, v in outputs["logs"].items():
             epoch_metrics[k] = v.mean()
         self.log_dict(epoch_metrics, prog_bar=True, logger=True)
 
     def test_epoch_end(self, outputs):
+        self.save_prefix= 'test'
         if len(outputs) == 0:
             return
         outputs = gather_step_outputs(outputs)
         epoch_metrics = compute_epoch_metrics(
-            outputs, self.args, self.device, key_prefix=self.save_prefix
+            self._list_of_metrics, outputs, self.args, self.device, key_prefix="test_"
         )
 
         for k, v in outputs["logs"].items():
@@ -291,14 +297,8 @@ def concat_all_gather(tensor):
     return output
 
 
-def compute_epoch_metrics(result_dict, args, device, key_prefix=""):
+def compute_epoch_metrics(list_of_metrics, result_dict, args, device, key_prefix=""):
     stats_dict = OrderedDict()
-
-    list_of_metrics = [
-        metrics.get_classification_metrics,
-        metrics.get_survival_metrics,
-        metrics.get_risk_metrics,
-    ]
 
     """
         Remove prefix from keys. For instance, convert:
@@ -369,12 +369,49 @@ def train(args):
     for key, value in sorted(vars(args).items()):
         print("{} -- {}".format(key.upper(), value))
 
+    if args.snapshot is not None:
+        module = module.load_from_checkpoint(checkpoint_path= args.snapshot, strict=False)
+        module.args = args
+    
     trainer.fit(module, train_dataset, dev_dataset)
+    args.model_path = trainer.checkpoint_callback.best_model_path
+    print("Saving args to {}".format(args.results_path))
+    pickle.dump(vars(args), open(args.results_path, "wb"))
+
+def test(args):
+    trainer = pl.Trainer.from_argparse_args(args)
+    # Remove callbacks from args for safe pickling later
+    args.callbacks = None
+    args.num_nodes = trainer.num_nodes
+    args.num_processes = trainer.num_processes
+    args.world_size = args.num_nodes * args.num_processes
+    args.global_rank = trainer.global_rank
+    args.local_rank = trainer.local_rank
+
+    train_dataset = loaders.get_train_dataset_loader(
+        args, get_dataset(args.dataset, "train", args)
+    )
+    test_dataset = loaders.get_eval_dataset_loader(
+        args, get_dataset(args.dataset, "test", args), False
+    )
+
+    args.censoring_distribution = metrics.get_censoring_dist(train_dataset.dataset)
+    module = SybilLightning(args)
+    module = module.load_from_checkpoint(checkpoint_path= args.snapshot, strict=False)
+    module.args = args
+
+    # print args
+    for key, value in sorted(vars(args).items()):
+        print("{} -- {}".format(key.upper(), value))
+
+    trainer.test(module, test_dataset)
 
     print("Saving args to {}".format(args.results_path))
     pickle.dump(vars(args), open(args.results_path, "wb"))
 
-
 if __name__ == "__main__":
     args = parse_args()
-    train(args)
+    if args.train:
+        train(args)
+    elif args.test:
+        test(args)

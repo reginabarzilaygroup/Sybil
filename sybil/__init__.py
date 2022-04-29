@@ -17,7 +17,7 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-from sybil.model import Sybil
+from sybil.models.sybil import SybilNet
 from sybil.serie import Serie
 
 

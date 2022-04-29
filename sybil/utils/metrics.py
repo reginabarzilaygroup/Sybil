@@ -23,7 +23,7 @@ def get_classification_metrics(logging_dict, args):
 
     golds = np.array(logging_dict["golds"]).reshape(-1)
     probs = np.array(logging_dict["probs"])
-    preds = probs.argmax(axis=-1).reshape(-1)
+    preds = (probs[:, -1] > 0.5).reshape(-1)
     probs = probs.reshape((-1, probs.shape[-1]))
 
     stats_dict["accuracy"] = accuracy_score(y_true=golds, y_pred=preds)
@@ -69,6 +69,35 @@ def get_survival_metrics(logging_dict, args):
         )
     else:
         stats_dict["c_index"] = -1.0
+    return stats_dict
+
+
+def get_alignment_metrics(logging_dict, args):
+    stats_dict = OrderedDict()
+
+    golds = np.array(logging_dict["discrim_golds"]).reshape(-1)
+    probs = np.array(logging_dict["discrim_probs"])
+    preds = probs.argmax(axis=-1).reshape(-1)
+    probs = probs.reshape((-1, probs.shape[-1]))
+
+    stats_dict["discrim_accuracy"] = accuracy_score(y_true=golds, y_pred=preds)
+    stats_dict["discrim_precision"] = precision_score(y_true=golds, y_pred=preds)
+    stats_dict["discrim_recall"] = recall_score(y_true=golds, y_pred=preds)
+    stats_dict["discrim_f1"] = f1_score(y_true=golds, y_pred=preds)
+    num_pos = golds.sum()
+    if num_pos > 0 and num_pos < len(golds):
+        try:
+            stats_dict["discrim_auc"] = roc_auc_score(
+                golds, probs[:, -1], average="samples"
+            )
+            stats_dict["discrim_ap_score"] = average_precision_score(
+                golds, probs[:, -1], average="samples"
+            )
+            precision, recall, _ = precision_recall_curve(golds, probs[:, -1])
+            stats_dict["discrim_prauc"] = auc(recall, precision)
+        except Exception as e:
+            print(e)
+
     return stats_dict
 
 

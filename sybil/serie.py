@@ -4,8 +4,9 @@ from argparse import Namespace
 import torch
 import numpy as np
 import pydicom
+import torchio as tio
 
-from sybil.datasets.utils import order_slices
+from sybil.datasets.utils import order_slices, VOXEL_SPACING
 from sybil.utils.loading import get_sample_loader
 
 
@@ -15,6 +16,7 @@ class Meta(NamedTuple):
     pixel_spacing: list
     manufacturer: str
     slice_positions: list
+    voxel_spacing: torch.Tensor
 
 
 class Label(NamedTuple):
@@ -28,6 +30,7 @@ class Serie:
     def __init__(
         self,
         dicoms: List[str],
+        voxel_spacing: Optional[List[float]] = None,
         label: Optional[int] = None,
         censor_time: Optional[int] = None,
         file_type: Literal["png", "dicom"] = "dicom",
@@ -39,6 +42,9 @@ class Serie:
         ----------
         `dicoms` : List[str]
             [description]
+        `voxel_spacing`: Optional[List[float]], optional
+            The voxel spacing associated with input CT
+            as (row spacing, col spacing, slice thickness)
         `label` : Optional[int], optional
             Whether the patient associated with this serie
             has or ever developped cancer.
@@ -56,11 +62,15 @@ class Serie:
 
         self._censor_time = censor_time
         self._label = label
-
         args = self._load_args(file_type)
         self._loader = get_sample_loader(split, args)
-        self._meta = self._load_metadata(dicoms, file_type)
+        self._meta = self._load_metadata(dicoms, voxel_spacing, file_type)
         self._check_valid(args)
+        self.resample_transform
+        self.resample_transform = tio.transforms.Resample(target=VOXEL_SPACING)
+        self.padding_transform = tio.transforms.CropOrPad(
+            target_shape=tuple(args.img_size + [args.num_images]), padding_mode=0
+        )
 
     def has_label(self) -> bool:
         """Check if there is a label associated with this serie.
@@ -120,17 +130,28 @@ class Serie:
             CT volume of shape (1, C, N, H, W)
         """
         x, _ = self._loader.get_images(self._meta.paths, [], {})
+
+        x = tio.ScalarImage(
+            affine=torch.diag(self._meta.voxel_spacing),
+            tensor=x.permute(0, 2, 3, 1),
+        )
+        x = self.resample_transform(x)
+        x = self.padding_transform(x)
+        x = x.data.permute(0, 3, 1, 2)
         x.unsqueeze_(0)
         return x
 
-    def _load_metadata(self, paths, file_type):
+    def _load_metadata(self, paths, voxel_spacing, file_type):
         """Extract metadata from dicom files efficiently
 
         Parameters
         ----------
-        dicom_paths : List[str]
+        `dicom_paths` : List[str]
             List of paths to dicom files
-        file_type : Literal['png', 'dicom']
+        `voxel_spacing`: Optional[List[float]], optional
+            The voxel spacing associated with input CT
+            as (row spacing, col spacing, slice thickness)
+        `file_type` : Literal['png', 'dicom']
             File type of CT slices
 
         Returns
@@ -144,9 +165,7 @@ class Serie:
             for path in paths:
                 dcm = pydicom.dcmread(path, stop_before_pixels=True)
                 processed_paths.append(path)
-                slice_positions.append(
-                    float(dcm.ImagePositionPatient[-1])
-                )
+                slice_positions.append(float(dcm.ImagePositionPatient[-1]))
 
             processed_paths, slice_positions = order_slices(
                 processed_paths, slice_positions
@@ -155,12 +174,16 @@ class Serie:
             thickness = float(dcm.SliceThickness)
             pixel_spacing = list(map(float, dcm.PixelSpacing))
             manufacturer = dcm.Manufacturer
+            voxel_spacing = torch.tensor(pixel_spacing + [thickness, 1])
         elif file_type == "png":
             processed_paths = paths
             slice_positions = list(range(len(paths)))
-            thickness = 0
+            thickness = voxel_spacing[-1] if voxel_spacing is not None else None
             pixel_spacing = []
-            manufacturer = ''
+            manufacturer = ""
+            voxel_spacing = (
+                torch.tensor(voxel_spacing + [1]) if voxel_spacing is not None else None
+            )
 
         meta = Meta(
             paths=processed_paths,
@@ -168,6 +191,7 @@ class Serie:
             pixel_spacing=pixel_spacing,
             manufacturer=manufacturer,
             slice_positions=slice_positions,
+            voxel_spacing=voxel_spacing,
         )
         return meta
 
@@ -190,6 +214,7 @@ class Serie:
                 "img_size": [256, 256],
                 "img_mean": [128.1722],
                 "img_std": [87.1849],
+                "num_images": 200,
                 "img_file_type": file_type,
                 "num_chan": 3,
                 "cache_path": None,
@@ -215,9 +240,13 @@ class Serie:
             - serie doesn't have a label, OR
             - slice thickness is too big
         """
-        if self._meta.thickness > args.slice_thickness_filter:
+        if (self._meta.thickness is None) or (
+            self._meta.thickness > args.slice_thickness_filter
+        ):
             raise ValueError(
                 "slice thickness is greater than {}.".format(
                     args.slice_thickness_filter
                 )
             )
+        if self._meta.voxel_spacing is None:
+            raise ValueError("voxel spacing either not set or not found in DICOM")

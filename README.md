@@ -32,7 +32,7 @@ You can replicate the results from our model using our training script:
 python train.py
 ```
 
-See our [documentation] for a full description of Sybil's training parameters.
+See our [documentation](docs/readme.md) for a full description of Sybil's training parameters.
 
 ## Cite
 

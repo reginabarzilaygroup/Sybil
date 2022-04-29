@@ -133,7 +133,13 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--dataset",
         default="nlst",
-        choices=["sybil", "nlst" "nlst_risk_factors", "nlst_for_plco"],
+        choices=[
+            "sybil",
+            "nlst",
+            "nlst_risk_factors",
+            "nlst_for_plco2012",
+            "nlst_for_plco2019" "mgh",
+        ],
         help="Name of dataset from dataset factory to use [default: nlst]",
     )
     parser.add_argument(
@@ -172,6 +178,12 @@ def parse_args(args_strings=None):
         default="png",
         choices=["png", "dicom"],
         help="Type of image. one of [png, dicom]",
+    )
+    parser.add_argument(
+        "--fix_seed_for_multi_image_augmentations",
+        action="store_true",
+        default=False,
+        help="Use same seed for each slice of volume augmentations",
     )
     parser.add_argument(
         "--dataset_file_path",
@@ -232,6 +244,12 @@ def parse_args(args_strings=None):
 
     # handling CT slices
     parser.add_argument(
+        "--resample_pixel_spacing_prob",
+        type=float,
+        default=1,
+        help="Probability of resampling pixel spacing into fixed dimensions. 1 when eval and using resampling",
+    )
+    parser.add_argument(
         "--num_images",
         type=int,
         default=200,
@@ -247,12 +265,6 @@ def parse_args(args_strings=None):
         "--slice_thickness_filter",
         type=float,
         help="Slice thickness using, if restricting to specific thickness value.",
-    )
-    parser.add_argument(
-        "--cross_section_filter",
-        type=str,
-        nargs="*",
-        help="Restrict to using specific cross sections [transverse, coronal, sagittal, oblique].",
     )
     parser.add_argument(
         "--use_only_thin_cuts_for_ct",
@@ -291,48 +303,18 @@ def parse_args(args_strings=None):
         help="Weight of loss for predicting volume attention scores",
     )
 
-    # augmentations
-    parser.add_argument(
-        "--image_augmentations",
-        nargs="*",
-        default=["scale_2d"],
-        help='List of image-transformations to use [default: ["scale_2d"]] \
-                        Usage: "--image_augmentations trans1/arg1=5/arg2=2 trans2 trans3/arg4=val"',
-    )
-    parser.add_argument(
-        "--tensor_augmentations",
-        nargs="*",
-        default=["normalize_2d"],
-        help='List of tensor-transformations to use [default: ["normalize_2d"]]\
-                        Usage: similar to image_augmentations',
-    )
-    parser.add_argument(
-        "--test_image_augmentations",
-        nargs="*",
-        default=["scale_2d"],
-        help='List of image-transformations to use for the dev and test dataset [default: ["scale_2d"]] \
-                        Usage: similar to image_augmentations',
-    )
-    parser.add_argument(
-        "--test_tensor_augmentations",
-        nargs="*",
-        default=["normalize_2d"],
-        help='List of tensor-transformations to use for the dev and test dataset [default: ["normalize_2d"]]\
-                        Usage: similar to image_augmentations',
-    )
-    parser.add_argument(
-        "--fix_seed_for_multi_image_augmentations",
-        action="store_true",
-        default=False,
-        help="Whether to use the same seed (same random augmentations) for multi image inputs.",
-    )
-
     # regularization
     parser.add_argument(
         "--primary_loss_lambda",
         type=float,
         default=1.0,
         help="Lambda to weigh the primary loss.",
+    )
+    parser.add_argument(
+        "--adv_loss_lambda",
+        type=float,
+        default=1.0,
+        help="Lambda to weigh the adversary loss.",
     )
 
     # learning
@@ -372,6 +354,12 @@ def parse_args(args_strings=None):
         default=0,
         help="L2 Regularization penaty [default: 0]",
     )
+    parser.add_argument(
+        "--adv_lr",
+        type=float,
+        default=0.001,
+        help="Initial learning rate for adversary model [default: 0.001]",
+    )
 
     # schedule
     parser.add_argument(
@@ -379,6 +367,12 @@ def parse_args(args_strings=None):
         type=int,
         default=5,
         help="Number of epochs without improvement on dev before halving learning rate and reloading best model [default: 5]",
+    )
+    parser.add_argument(
+        "--num_adv_steps",
+        type=int,
+        default=1,
+        help="Number of steps for domain adaptation discriminator per one step of encoding model [default: 5]",
     )
     parser.add_argument(
         "--tuning_metric",
@@ -468,10 +462,10 @@ def parse_args(args_strings=None):
     if (isinstance(args.gpus, str) and len(args.gpus.split(",")) > 1) or (
         isinstance(args.gpus, int) and args.gpus > 1
     ):
-        args.strategy = "ddp"
+        args.accelerator = "ddp"
         args.replace_sampler_ddp = False
     else:
-        args.strategy = None
+        args.accelerator = None
         args.replace_sampler_ddp = False
 
     args.unix_username = pwd.getpwuid(os.getuid())[0]
@@ -479,27 +473,4 @@ def parse_args(args_strings=None):
     # learning initial state
     args.step_indx = 1
 
-    # Parse list args to appropriate data format
-    parse_list_args(args)
-
     return args
-
-
-def parse_list_args(args):
-    """Converts list args to their appropriate data format.
-
-    Includes parsing image dimension args, augmentation args,
-    block layout args, and more.
-
-    Arguments:
-        args(Namespace): Config.
-
-    Returns:
-        args but with certain elements modified to be in the
-        appropriate data format.
-    """
-
-    args.image_augmentations = parse_augmentations(args.image_augmentations)
-    args.tensor_augmentations = parse_augmentations(args.tensor_augmentations)
-    args.test_image_augmentations = parse_augmentations(args.test_image_augmentations)
-    args.test_tensor_augmentations = parse_augmentations(args.test_tensor_augmentations)
