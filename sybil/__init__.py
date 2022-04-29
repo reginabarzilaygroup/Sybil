@@ -18,7 +18,6 @@ finally:
     del version, PackageNotFoundError
 
 from sybil.models.sybil import SybilNet
-from sybil.models.adversary import AlignmentMLP
 from sybil.serie import Serie
 
 
