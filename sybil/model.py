@@ -10,7 +10,13 @@ from sybil.utils.download import download_file_from_google_drive
 from sybil.utils.metrics import get_survival_metrics
 
 
-NAME_TO_FILE: Dict[str, str] = {"test": "1P7rKz9Ir8Gd99AisaKLFddtS9uOczPG0"}
+NAME_TO_FILE: Dict[str, str] = {
+    "ensemble1": "28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt",
+    "ensemble2": "56ce1a7d241dc342982f5466c4a9d7efepoch=10.ckpt",
+    "ensemble3": "624407ef8e3a2a009f9fa51f9846fe9aepoch=10.ckpt",
+    "ensemble4": "64a91b25f84141d32852e75a3aec7305epoch=10.ckpt",
+    "ensemble5": "65fd1f04cb4c5847d86a9ed8ba31ac1aepoch=10.ckpt",
+}
 
 
 class Prediction(NamedTuple):
@@ -74,13 +80,13 @@ class Sybil:
 
         # Load checkpoint
         checkpoint = torch.load(name_or_path, map_location="cpu")
-        hparams = checkpoint['hyper_parameters']
+        hparams = checkpoint["hyper_parameters"]
         self._max_followup = hparams["max_followup"]
         self._censoring_dist = hparams["censoring_distribution"]
         self.model = SybilNet(Namespace(**hparams))
 
         # Remove model from param names
-        state_dict = {k[6:]: v for k, v in checkpoint['state_dict'].items()}
+        state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
         self.model.load_state_dict(state_dict)  # type: ignore
         if self.device == "cuda":
             self.model.to("cuda")
@@ -105,9 +111,7 @@ class Sybil:
         if isinstance(series, Serie):
             series = [series]
         elif not isinstance(series, list):
-            raise ValueError(
-                "Expected either a Serie object or list of Serie objects."
-            )
+            raise ValueError("Expected either a Serie object or list of Serie objects.")
 
         scores: List[List[float]] = []
         for serie in series:
@@ -158,11 +162,10 @@ class Sybil:
         input_dict = {
             "probs": torch.tensor(scores),
             "censors": torch.tensor([label.censor_time for label in labels]),
-            "golds": torch.tensor([label.y for label in labels])
+            "golds": torch.tensor([label.y for label in labels]),
         }
         args = Namespace(
-            max_followup=self._max_followup,
-            censoring_distribution=self._censoring_dist
+            max_followup=self._max_followup, censoring_distribution=self._censoring_dist
         )
         out = get_survival_metrics(input_dict, args)
         auc = [float(out[f"{i + 1}_year_auc"]) for i in range(self._max_followup)]
