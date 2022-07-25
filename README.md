@@ -19,7 +19,6 @@ scores = model.predict([serie])
 # You can also evaluate by providing labels
 serie = Serie([dicom_path_1, dicom_path_2, ...], label=1)
 results = model.evaluate([serie])
-
 ```
 
 Models available are: `sybil_base` and `sybil_ensemble`.

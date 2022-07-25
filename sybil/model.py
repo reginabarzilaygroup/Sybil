@@ -3,6 +3,7 @@ import os
 from argparse import Namespace
 
 import torch
+import numpy as np
 
 from sybil.serie import Serie
 from sybil.models.sybil import SybilNet
@@ -10,12 +11,15 @@ from sybil.utils.download import download_file_from_google_drive
 from sybil.utils.metrics import get_survival_metrics
 
 
-NAME_TO_FILE: Dict[str, str] = {
-    "ensemble1": "28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt",
-    "ensemble2": "56ce1a7d241dc342982f5466c4a9d7efepoch=10.ckpt",
-    "ensemble3": "624407ef8e3a2a009f9fa51f9846fe9aepoch=10.ckpt",
-    "ensemble4": "64a91b25f84141d32852e75a3aec7305epoch=10.ckpt",
-    "ensemble5": "65fd1f04cb4c5847d86a9ed8ba31ac1aepoch=10.ckpt",
+NAME_TO_FILE = {
+    "sybil_base": ["28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt"],
+    "sybil_ensemble": [
+        "28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt",
+        "56ce1a7d241dc342982f5466c4a9d7efepoch=10.ckpt",
+        "624407ef8e3a2a009f9fa51f9846fe9aepoch=10.ckpt",
+        "64a91b25f84141d32852e75a3aec7305epoch=10.ckpt",
+        "65fd1f04cb4c5847d86a9ed8ba31ac1aepoch=10.ckpt",
+    ],
 }
 
 
@@ -35,19 +39,21 @@ def download_sybil(name, cache):
     os.makedirs(cache, exist_ok=True)
 
     # Download if neded
-    file_id = NAME_TO_FILE[name]
-    path = os.path.join(cache, f"{file_id}.ckpt")
-    if not os.path.exists(path):
-        print(f"Downloading model to {cache}")
-        download_file_from_google_drive(file_id, path)
-
-    return path
+    file_ids = NAME_TO_FILE[name]
+    download_paths = []
+    for file_id in file_ids:
+        path = os.path.join(cache, f"{file_id}.ckpt")
+        if not os.path.exists(path):
+            print(f"Downloading model to {cache}")
+            download_file_from_google_drive(file_id, path)
+        download_paths.append(path)
+    return download_paths
 
 
 class Sybil:
     def __init__(
         self,
-        name_or_path: str = "sybil_base",
+        name_or_path: List[str] = ["sybil_base"],
         cache: str = "~/.sybil/",
         device: Optional[str] = None,
     ):
@@ -69,8 +75,12 @@ class Sybil:
         if name_or_path in NAME_TO_FILE:
             name_or_path = download_sybil(name_or_path, cache)
 
-        elif not os.path.exists(name_or_path):
-            raise ValueError(f"No saved model or local path: {name_or_path}")
+        elif not all(os.path.exists(p) for p in name_or_path):
+            raise ValueError(
+                "No saved model or local path: {}".format(
+                    [p for p in name_or_path if not os.path.exists(p)]
+                )
+            )
 
         # Set device
         if device is not None:
@@ -78,27 +88,49 @@ class Sybil:
         else:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        self.ensemble = torch.nn.ModuleList()
+        for nop in name_or_path:
+            self.ensemble.append(Sybil(nop, cache, device))
+
+    def load_model(self, path):
+        """Load model from path.
+
+        Parameters
+        ----------
+        path : str
+            Path to a sybil checkpoint.
+
+        Returns
+        -------
+        model
+            Pretrained Sybil model
+        """
         # Load checkpoint
-        checkpoint = torch.load(name_or_path, map_location="cpu")
+        checkpoint = torch.load(path, map_location="cpu")
         hparams = checkpoint["hyper_parameters"]
         self._max_followup = hparams["max_followup"]
         self._censoring_dist = hparams["censoring_distribution"]
-        self.model = SybilNet(Namespace(**hparams))
+        model = SybilNet(Namespace(**hparams))
 
         # Remove model from param names
         state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
-        self.model.load_state_dict(state_dict)  # type: ignore
+        model.load_state_dict(state_dict)  # type: ignore
         if self.device == "cuda":
-            self.model.to("cuda")
+            model.to("cuda")
 
         # Set eval
-        self.model.eval()
+        model.eval()
+        return model
 
-    def predict(self, series: Union[Serie, List[Serie]]) -> Prediction:
+    def _predict(
+        self, model: SybilNet, series: Union[Serie, List[Serie]]
+    ) -> Prediction:
         """Run predictions over the given serie(s).
 
         Parameters
         ----------
+        model: SybilNet
+            Instance of SybilNet
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
 
@@ -123,11 +155,32 @@ class Sybil:
                 volume = volume.cuda()
 
             with torch.no_grad():
-                out = self.model(volume)
+                out = model(volume)
                 score = out["logit"].sigmoid().cpu().numpy().tolist()
                 scores.append(score)
 
         return Prediction(scores=scores)
+
+    def predict(self, series: Union[Serie, List[Serie]]) -> Prediction:
+        """Run predictions over the given serie(s) and ensemble
+
+        Parameters
+        ----------
+        series : Union[Serie, Iterable[Serie]]
+            One or multiple series to run predictions for.
+
+        Returns
+        -------
+        Prediction
+            Output prediction. See details for :class:`~sybil.model.Prediction`".
+
+        """
+        scores = []
+        for sybil in self.ensemble:
+            pred = self._predict(sybil, series)
+            scores.append(pred.scores)
+        scores = np.mean(np.array(scores), axis=-1).tolist()
+        Prediction(scores=scores)
 
     def evaluate(self, series: Union[Serie, List[Serie]]) -> Evaluation:
         """Run evaluation over the given serie(s).
