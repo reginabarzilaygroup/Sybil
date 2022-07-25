@@ -10,7 +10,7 @@ You can load our pretrained model trained on the NLST dataset, and score a given
 from sybil import Serie, Sybil
 
 # Load a trained model
-model = Sybil.load("sybil_base")
+model = Sybil("sybil_base")
 
 # Get risk scores
 serie = Serie([dicom_path_1, dicom_path_2, ...])

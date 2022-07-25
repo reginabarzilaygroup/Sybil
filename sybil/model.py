@@ -1,6 +1,7 @@
 from typing import NamedTuple, Union, Dict, List, Optional
 import os
 from argparse import Namespace
+import gdown 
 
 import torch
 import numpy as np
@@ -45,7 +46,7 @@ def download_sybil(name, cache):
         path = os.path.join(cache, f"{file_id}.ckpt")
         if not os.path.exists(path):
             print(f"Downloading model to {cache}")
-            download_file_from_google_drive(file_id, path)
+            gdown.download(id=file_id, output=path, quiet = False)
         download_paths.append(path)
     return download_paths
 
@@ -53,7 +54,7 @@ def download_sybil(name, cache):
 class Sybil:
     def __init__(
         self,
-        name_or_path: List[str] = ["sybil_base"],
+        name_or_path: Union[List[str], str] = ["sybil_base"],
         cache: str = "~/.sybil/",
         device: Optional[str] = None,
     ):
@@ -72,7 +73,7 @@ class Sybil:
 
         """
         # Download if needed
-        if name_or_path in NAME_TO_FILE:
+        if isinstance(name_or_path, str) and name_or_path in NAME_TO_FILE:
             name_or_path = download_sybil(name_or_path, cache)
 
         elif not all(os.path.exists(p) for p in name_or_path):
@@ -90,7 +91,7 @@ class Sybil:
 
         self.ensemble = torch.nn.ModuleList()
         for nop in name_or_path:
-            self.ensemble.append(Sybil(nop, cache, device))
+            self.ensemble.append(self.load_model(nop))
 
     def load_model(self, path):
         """Load model from path.
@@ -107,10 +108,10 @@ class Sybil:
         """
         # Load checkpoint
         checkpoint = torch.load(path, map_location="cpu")
-        hparams = checkpoint["hyper_parameters"]
-        self._max_followup = hparams["max_followup"]
-        self._censoring_dist = hparams["censoring_distribution"]
-        model = SybilNet(Namespace(**hparams))
+        args = checkpoint["args"]
+        self._max_followup = args.max_followup
+        self._censoring_dist = args.censoring_distribution
+        model = SybilNet(args)
 
         # Remove model from param names
         state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}

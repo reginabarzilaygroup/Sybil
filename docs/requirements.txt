@@ -19,4 +19,6 @@ albumentations==1.1.0
 pydicom==2.2.2
 # logging
 #comet-ml
-torchio
+torchio=='0.18.74'
+# downloading snapshots
+gdown==4.5.1
