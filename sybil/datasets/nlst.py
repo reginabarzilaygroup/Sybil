@@ -85,10 +85,8 @@ class NLST_Survival_Dataset(data.Dataset):
 
         self.input_loader = get_sample_loader(split_group, args)
         self.always_resample_pixel_spacing = split_group in ["dev", "test"]
-        
-        self.resample_transform = tio.transforms.Resample(
-            target=VOXEL_SPACING
-        )
+
+        self.resample_transform = tio.transforms.Resample(target=VOXEL_SPACING)
         self.padding_transform = tio.transforms.CropOrPad(
             target_shape=tuple(args.img_size + [args.num_images]), padding_mode=0
         )
@@ -621,7 +619,7 @@ class NLST_Survival_Dataset(data.Dataset):
         out_dict["input"] = input_arr.data.permute(0, 3, 1, 2)
         if self.args.use_annotations:
             out_dict["mask"] = mask_arr.data.permute(0, 3, 1, 2)
-            
+
         return out_dict
 
     def reshape_images(self, images):
@@ -696,44 +694,53 @@ class NLST_for_PLCO(NLST_Survival_Dataset):
 
 class NLST_for_PLCO_Screening(NLST_for_PLCO):
     def create_dataset(self, split_group):
-        generated_lung_rads = pickle.load(open('/data/rsg/mammogram/NLST/nlst_acc2lungrads.p', 'rb'))
+        generated_lung_rads = pickle.load(
+            open("/data/rsg/mammogram/NLST/nlst_acc2lungrads.p", "rb")
+        )
         dataset = super().create_dataset(split_group)
         # get lung rads for each year
         pid2lungrads = {}
         for d in dataset:
-            lungrads = generated_lung_rads[d['exam']]
-            if d['pid'] in pid2lungrads:
-                pid2lungrads[d['pid']][d['screen_timepoint']] = lungrads
+            lungrads = generated_lung_rads[d["exam"]]
+            if d["pid"] in pid2lungrads:
+                pid2lungrads[d["pid"]][d["screen_timepoint"]] = lungrads
             else:
-                pid2lungrads[d['pid']] = {d['screen_timepoint']: lungrads}
+                pid2lungrads[d["pid"]] = {d["screen_timepoint"]: lungrads}
         plco_results_dataset = []
         for d in dataset:
-            if len(pid2lungrads[d['pid']]) < 3:
+            if len(pid2lungrads[d["pid"]]) < 3:
                 continue
-            is_third_screen = d['screen_timepoint'] == 2
-            is_1yr_ca_free = (d['y'] and d['time_at_event'] > 0) or (not d['y'])
+            is_third_screen = d["screen_timepoint"] == 2
+            is_1yr_ca_free = (d["y"] and d["time_at_event"] > 0) or (not d["y"])
             if is_third_screen and is_1yr_ca_free:
-                d['scr_group_coef'] = self.get_screening_group(pid2lungrads[d['pid']])
+                d["scr_group_coef"] = self.get_screening_group(pid2lungrads[d["pid"]])
                 for k in ["age", "years_since_quit_smoking", "smoking_duration"]:
                     d[k] = d[k] + 1
                 plco_results_dataset.append(d)
             else:
-                continue 
+                continue
         return plco_results_dataset
 
     def get_screening_group(self, lung_rads_dict):
         """doi:10.1001/jamanetworkopen.2019.0204 Table 1"""
-        scr1, scr2, scr3 =  lung_rads_dict[0], lung_rads_dict[1], lung_rads_dict[2]
+        scr1, scr2, scr3 = lung_rads_dict[0], lung_rads_dict[1], lung_rads_dict[2]
 
         if all([not scr1, not scr2, not scr3]):
             return 0
         elif (not scr3) and ((not scr1) or (not scr2)):
             return 0.6554117
-        elif ( (not scr3) and all([scr1, scr2]) ) or (all([not scr1, not scr2]) and (scr3) ):
+        elif ((not scr3) and all([scr1, scr2])) or (
+            all([not scr1, not scr2]) and (scr3)
+        ):
             return 0.9798233
-        else:
+        elif (
+            (all([scr1, scr3]) and not scr2)
+            or (not scr1 and all([scr2, scr3]))
+            or (all([scr1, scr2, scr3]))
+        ):
             return 2.1940610
-        raise ValueError("Screen {} has not equivalent PLCO group".format(lung_rads_dict))
+        raise ValueError(
+            "Screen {} has not equivalent PLCO group".format(lung_rads_dict)
         )
 
 
