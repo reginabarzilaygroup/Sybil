@@ -156,10 +156,10 @@ class Sybil:
 
             with torch.no_grad():
                 out = model(volume)
-                score = out["logit"].sigmoid().cpu().numpy().tolist()
+                score = out["logit"].sigmoid().squeeze(0).cpu().numpy().tolist()
                 scores.append(score)
 
-        return Prediction(scores=scores)
+        return np.stack(scores)
 
     def predict(self, series: Union[Serie, List[Serie]]) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
@@ -179,8 +179,8 @@ class Sybil:
         for sybil in self.ensemble:
             pred = self._predict(sybil, series)
             scores.append(pred.scores)
-        scores = np.mean(np.array(scores), axis=-1).tolist()
-        Prediction(scores=scores)
+        scores = np.mean(np.array(scores), axis=0).tolist()
+        return Prediction(scores=scores)
 
     def evaluate(self, series: Union[Serie, List[Serie]]) -> Evaluation:
         """Run evaluation over the given serie(s).
