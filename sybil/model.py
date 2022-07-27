@@ -8,7 +8,6 @@ import numpy as np
 
 from sybil.serie import Serie
 from sybil.models.sybil import SybilNet
-from sybil.utils.download import download_file_from_google_drive
 from sybil.utils.metrics import get_survival_metrics
 
 
