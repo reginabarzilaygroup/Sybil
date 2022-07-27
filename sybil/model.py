@@ -1,7 +1,7 @@
 from typing import NamedTuple, Union, Dict, List, Optional
 import os
 from argparse import Namespace
-import gdown 
+import gdown
 
 import torch
 import numpy as np
@@ -12,13 +12,15 @@ from sybil.utils.metrics import get_survival_metrics
 
 
 NAME_TO_FILE = {
-    "sybil_base": ["28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt"],
+    "sybil_base": [
+        "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz"  # 28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt
+    ],
     "sybil_ensemble": [
-        "28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt",
-        "56ce1a7d241dc342982f5466c4a9d7efepoch=10.ckpt",
-        "624407ef8e3a2a009f9fa51f9846fe9aepoch=10.ckpt",
-        "64a91b25f84141d32852e75a3aec7305epoch=10.ckpt",
-        "65fd1f04cb4c5847d86a9ed8ba31ac1aepoch=10.ckpt",
+        "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz",  # 28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt
+        "1rscGi1grSxaVGzn-tqKtuAR3ipo0DWgA",  # 56ce1a7d241dc342982f5466c4a9d7efepoch=10.ckpt
+        "1DV0Ge7n9r8WAvBXyoNRPwyA7VL43csAr",  # 624407ef8e3a2a009f9fa51f9846fe9aepoch=10.ckpt
+        "1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP",  # 64a91b25f84141d32852e75a3aec7305epoch=10.ckpt
+        "1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP",  # 65fd1f04cb4c5847d86a9ed8ba31ac1aepoch=10.ckpt
     ],
 }
 
@@ -45,7 +47,7 @@ def download_sybil(name, cache):
         path = os.path.join(cache, f"{file_id}.ckpt")
         if not os.path.exists(path):
             print(f"Downloading model to {cache}")
-            gdown.download(id=file_id, output=path, quiet = False)
+            gdown.download(id=file_id, output=path, quiet=False)
         download_paths.append(path)
     return download_paths
 
