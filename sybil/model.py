@@ -55,7 +55,7 @@ def download_sybil(name, cache):
 class Sybil:
     def __init__(
         self,
-        name_or_path: Union[List[str], str] = ["sybil_base"],
+        name_or_path: Union[List[str], str] = "sybil_base",
         cache: str = "~/.sybil/",
         device: Optional[str] = None,
     ):
@@ -91,8 +91,8 @@ class Sybil:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.ensemble = torch.nn.ModuleList()
-        for nop in name_or_path:
-            self.ensemble.append(self.load_model(nop))
+        for model_path in name_or_path:
+            self.ensemble.append(self.load_model(model_path))
 
     def load_model(self, path):
         """Load model from path.
@@ -122,6 +122,7 @@ class Sybil:
 
         # Set eval
         model.eval()
+        print(f"Loaded model from {path}")
         return model
 
     def _predict(
