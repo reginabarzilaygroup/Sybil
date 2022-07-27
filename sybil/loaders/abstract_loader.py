@@ -144,11 +144,7 @@ class abstract_loader:
             self.composed_all_augmentations = ComposeAug(augmentations)
 
     @abstractmethod
-    def configure_path(self, path, additional, sample):
-        pass
-
-    @abstractmethod
-    def load_input(self, path, additional):
+    def load_input(self, path, sample):
         pass
 
     @property
@@ -160,6 +156,9 @@ class abstract_loader:
     @abstractmethod
     def apply_augmentations(self):
         return True
+
+    def configure_path(self, path, sample):
+        return path 
 
     def get_image(self, path, sample):
         """
