@@ -178,7 +178,7 @@ class Sybil:
         scores = []
         for sybil in self.ensemble:
             pred = self._predict(sybil, series)
-            scores.append(pred.scores)
+            scores.append(pred)
         scores = np.mean(np.array(scores), axis=0).tolist()
         return Prediction(scores=scores)
 
