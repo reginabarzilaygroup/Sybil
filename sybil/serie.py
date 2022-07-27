@@ -66,7 +66,6 @@ class Serie:
         self._loader = get_sample_loader(split, args)
         self._meta = self._load_metadata(dicoms, voxel_spacing, file_type)
         self._check_valid(args)
-        self.resample_transform
         self.resample_transform = tio.transforms.Resample(target=VOXEL_SPACING)
         self.padding_transform = tio.transforms.CropOrPad(
             target_shape=tuple(args.img_size + [args.num_images]), padding_mode=0
@@ -101,14 +100,14 @@ class Serie:
             [description]
 
         """
-        if not self._label:
+        if not self.has_label():
             raise ValueError("No label in this serie.")
 
         # First convert months to years
-        year_to_cancer = self._censor_time // 12  # type: ignore
+        year_to_cancer = self._censor_time # type: ignore
 
         y_seq = np.zeros(max_followup, dtype=np.float64)
-        y = int((year_to_cancer < max_followup) and self._cancer_label)  # type: ignore
+        y = int((year_to_cancer < max_followup) and self._label)  # type: ignore
         if y:
             y_seq[year_to_cancer:] = 1
         else:
@@ -129,7 +128,15 @@ class Serie:
         torch.Tensor
             CT volume of shape (1, C, N, H, W)
         """
-        x, _ = self._loader.get_images(self._meta.paths, [], {})
+
+        sample = {"seed": np.random.randint(0, 2**32 - 1)}
+
+        input_dicts = [self._loader.get_image(path, sample) for path in self._meta.paths]
+        
+        x = torch.cat( [i["input"].unsqueeze(0) for i in input_dicts], dim = 0)
+        
+        # Convert from (T, C, H, W) to (C, T, H, W)
+        x = x.permute(1, 0, 2, 3)
 
         x = tio.ScalarImage(
             affine=torch.diag(self._meta.voxel_spacing),
