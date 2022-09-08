@@ -5,6 +5,7 @@ import gdown
 
 import torch
 import numpy as np
+import pickle
 
 from sybil.serie import Serie
 from sybil.models.sybil import SybilNet
@@ -13,14 +14,38 @@ from sybil.utils.metrics import get_survival_metrics
 
 NAME_TO_FILE = {
     "sybil_base": [
-        "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz"  # 28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt
+        {
+            "checkpoint": "28a7cd44f5bcd3e6cc760b65c7e0d54d",
+            "google_checkpoint_id": "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz",
+            "google_calibrator_id": "",
+        }
     ],
     "sybil_ensemble": [
-        "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz",  # 28a7cd44f5bcd3e6cc760b65c7e0d54depoch=10.ckpt
-        "1rscGi1grSxaVGzn-tqKtuAR3ipo0DWgA",  # 56ce1a7d241dc342982f5466c4a9d7efepoch=10.ckpt
-        "1DV0Ge7n9r8WAvBXyoNRPwyA7VL43csAr",  # 624407ef8e3a2a009f9fa51f9846fe9aepoch=10.ckpt
-        "1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP",  # 64a91b25f84141d32852e75a3aec7305epoch=10.ckpt
-        "1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP",  # 65fd1f04cb4c5847d86a9ed8ba31ac1aepoch=10.ckpt
+        {
+            "checkpoint": "28a7cd44f5bcd3e6cc760b65c7e0d54d",
+            "google_checkpoint_id": "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz",
+            "google_calibrator_id": "",
+        },
+        {
+            "checkpoint": "56ce1a7d241dc342982f5466c4a9d7ef",
+            "google_checkpoint_id": "1rscGi1grSxaVGzn-tqKtuAR3ipo0DWgA",
+            "google_calibrator_id": "",
+        },
+        {
+            "checkpoint": "624407ef8e3a2a009f9fa51f9846fe9a",
+            "google_checkpoint_id": "1DV0Ge7n9r8WAvBXyoNRPwyA7VL43csAr",
+            "google_calibrator_id": "",
+        },
+        {
+            "checkpoint": "64a91b25f84141d32852e75a3aec7305",
+            "google_checkpoint_id": "1Acz_yzdJMpkz3PRrjXy526CjAboMEIHX",
+            "google_calibrator_id": "",
+        },
+        {
+            "checkpoint": "65fd1f04cb4c5847d86a9ed8ba31ac1a",
+            "google_checkpoint_id": "1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP",
+            "google_calibrator_id": "",
+        },
     ],
 }
 
@@ -42,14 +67,26 @@ def download_sybil(name, cache):
 
     # Download if neded
     file_ids = NAME_TO_FILE[name]
-    download_paths = []
-    for file_id in file_ids:
-        path = os.path.join(cache, f"{file_id}.ckpt")
-        if not os.path.exists(path):
+
+    download_model_paths = []
+    download_calib_paths = []
+
+    for model_dict in file_ids:
+        model_path = os.path.join(cache, f"{model_dict['checkpoint']}.ckpt")
+        calib_path = os.path.join(cache, f"{model_dict['checkpoint']}.p")
+        if not os.path.exists(model_path):
             print(f"Downloading model to {cache}")
-            gdown.download(id=file_id, output=path, quiet=False)
-        download_paths.append(path)
-    return download_paths
+            gdown.download(
+                id=model_dict["google_checkpoint_id"], output=model_path, quiet=False
+            )
+            # download calibrator
+            gdown.download(
+                id=model_dict["google_calibrator_id"], output=calib_path, quiet=False
+            )
+        download_model_paths.append(model_path)
+        download_calib_paths.append(calib_path)
+
+    return download_model_paths, download_calib_paths
 
 
 class Sybil:
@@ -57,25 +94,28 @@ class Sybil:
         self,
         name_or_path: Union[List[str], str] = "sybil_base",
         cache: str = "~/.sybil/",
+        calibrator_path: Optional[List[str]] = None,
         device: Optional[str] = None,
     ):
         """Initialize a trained Sybil model for inference.
 
         Parameters
         ----------
-        name_or_path : str
+        name_or_path: list or str
             Alias to a provided pretrained Sybil model or path
             to a sybil checkpoint.
         cache: str
             Directory to download model checkpoints to
+        calibrator_path: list
+            Paths to calibrator pickle files corresponding with model files
         device: str
             If provided, will run inference using this device.
             By default uses GPU, if available.
 
         """
         # Download if needed
-        if isinstance(name_or_path, str) and name_or_path in NAME_TO_FILE:
-            name_or_path = download_sybil(name_or_path, cache)
+        if isinstance(name_or_path, str) and (name_or_path in NAME_TO_FILE):
+            name_or_path, calibrator_path = download_sybil(name_or_path, cache)
 
         elif not all(os.path.exists(p) for p in name_or_path):
             raise ValueError(
@@ -91,8 +131,17 @@ class Sybil:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.ensemble = torch.nn.ModuleList()
-        for model_path in name_or_path:
-            self.ensemble.append(self.load_model(model_path))
+        for path in name_or_path:
+            self.ensemble.append(self.load_model(path))
+
+        self.calibrators = []
+        if calibrator_path is not None:
+            for path in calibrator_path:
+                self.calibrators.append(
+                    pickle.load(open("ResultsDir/sybil_calibrators.p", "rb"))
+                )
+        else:
+            self.calibrators = [None] * len(name_or_path)
 
     def load_model(self, path):
         """Load model from path.
@@ -125,22 +174,52 @@ class Sybil:
         print(f"Loaded model from {path}")
         return model
 
+    def _calibrate(self, calibrator: Optional[dict], scores: np.ndarray) -> np.ndarray:
+        """Calibrate raw predictions
+
+        Parameters
+        ----------
+        calibrator: Optional[dict]
+            Dictionary of sklearn.calibration.CalibratedClassifierCV for each year, otherwise None.
+        scores: np.ndarray
+            risk scores as numpy array
+
+        Returns
+        -------
+            np.ndarray: calibrated risk scores as numpy array
+        """
+        if calibrator is None:
+            return scores
+
+        calibrated_scores = []
+        for YEAR in range(scores.shape[1]):
+            probs = scores[:, YEAR].reshape(-1, 1)
+            probs = calibrator["Year{}".format(YEAR + 1)].predict_proba(probs)[:, 1]
+            calibrated_scores.append(probs)
+
+        return np.stack(calibrated_scores, axis=1)
+
     def _predict(
-        self, model: SybilNet, series: Union[Serie, List[Serie]]
-    ) -> Prediction:
+        self,
+        model: SybilNet,
+        calibrator: Optional[dict],
+        series: Union[Serie, List[Serie]],
+    ) -> np.ndarray:
         """Run predictions over the given serie(s).
 
         Parameters
         ----------
         model: SybilNet
             Instance of SybilNet
+        calibrator: Dict or None
+            Dictionary of sklearn.calibration.CalibratedClassifierCV for each year, otherwise None.
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
 
         Returns
         -------
         Prediction
-            Output prediction. See details for :class:`~sybil.model.Prediction`".
+            Output prediction as risk scores.
 
         """
         if isinstance(series, Serie):
@@ -162,7 +241,8 @@ class Sybil:
                 score = out["logit"].sigmoid().squeeze(0).cpu().numpy().tolist()
                 scores.append(score)
 
-        return np.stack(scores)
+        scores = self._calibrate(calibrator, np.stack(scores))
+        return scores
 
     def predict(self, series: Union[Serie, List[Serie]]) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
@@ -179,8 +259,8 @@ class Sybil:
 
         """
         scores = []
-        for sybil in self.ensemble:
-            pred = self._predict(sybil, series)
+        for sybil, calibrator in zip(self.ensemble, self.calibrators):
+            pred = self._predict(sybil, calibrator, series)
             scores.append(pred)
         scores = np.mean(np.array(scores), axis=0).tolist()
         return Prediction(scores=scores)
