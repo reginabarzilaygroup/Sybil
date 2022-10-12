@@ -286,7 +286,7 @@ class Sybil:
             pred = self._predict(sybil, series)
             scores.append(pred)
         scores = np.mean(np.array(scores), axis=0)
-        calib_scores = self._calibrate(scores)
+        calib_scores = self._calibrate(scores).tolist()
         return Prediction(scores=calib_scores)
 
     def evaluate(self, series: Union[Serie, List[Serie]]) -> Evaluation:
