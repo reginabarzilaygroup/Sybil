@@ -13,40 +13,53 @@ from sybil.utils.metrics import get_survival_metrics
 
 
 NAME_TO_FILE = {
-    "sybil_base": [
-        {
-            "checkpoint": "28a7cd44f5bcd3e6cc760b65c7e0d54d",
-            "google_checkpoint_id": "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz",
-            "google_calibrator_id": "",
-        }
-    ],
-    "sybil_ensemble": [
-        {
-            "checkpoint": "28a7cd44f5bcd3e6cc760b65c7e0d54d",
-            "google_checkpoint_id": "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz",
-            "google_calibrator_id": "",
-        },
-        {
-            "checkpoint": "56ce1a7d241dc342982f5466c4a9d7ef",
-            "google_checkpoint_id": "1rscGi1grSxaVGzn-tqKtuAR3ipo0DWgA",
-            "google_calibrator_id": "",
-        },
-        {
-            "checkpoint": "624407ef8e3a2a009f9fa51f9846fe9a",
-            "google_checkpoint_id": "1DV0Ge7n9r8WAvBXyoNRPwyA7VL43csAr",
-            "google_calibrator_id": "",
-        },
-        {
-            "checkpoint": "64a91b25f84141d32852e75a3aec7305",
-            "google_checkpoint_id": "1Acz_yzdJMpkz3PRrjXy526CjAboMEIHX",
-            "google_calibrator_id": "",
-        },
-        {
-            "checkpoint": "65fd1f04cb4c5847d86a9ed8ba31ac1a",
-            "google_checkpoint_id": "1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP",
-            "google_calibrator_id": "",
-        },
-    ],
+    "sybil_base": {
+        "checkpoint": ["28a7cd44f5bcd3e6cc760b65c7e0d54d"],
+        "google_checkpoint_id": ["1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz"],
+        "google_calibrator_id": "1F5TOtzueR-ZUvwl8Yv9Svs2NPP5El3HY",
+    },
+    "sybil_1": {
+        "checkpoint": ["28a7cd44f5bcd3e6cc760b65c7e0d54d"],
+        "google_checkpoint_id": ["1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz"],
+        "google_calibrator_id": "1F5TOtzueR-ZUvwl8Yv9Svs2NPP5El3HY",
+    },
+    "sybil_2": {
+        "checkpoint": ["56ce1a7d241dc342982f5466c4a9d7ef"],
+        "google_checkpoint_id": ["1rscGi1grSxaVGzn-tqKtuAR3ipo0DWgA"],
+        "google_calibrator_id": "1zKLVYBaiuMOx7p--e2zabs1LbQ-XXxcZ",
+    },
+    "sybil_3": {
+        "checkpoint": ["624407ef8e3a2a009f9fa51f9846fe9a"],
+        "google_checkpoint_id": ["1DV0Ge7n9r8WAvBXyoNRPwyA7VL43csAr"],
+        "google_calibrator_id": "1qh4nawgE2Kjf_H97XuuTpL7XUIX7JOJn",
+    },
+    "sybil_4": {
+        "checkpoint": ["64a91b25f84141d32852e75a3aec7305"],
+        "google_checkpoint_id": ["1Acz_yzdJMpkz3PRrjXy526CjAboMEIHX"],
+        "google_calibrator_id": "1QIvvCYLaesPGMEiE2Up77pKL3ygDdGU2",
+    },
+    "sybil_5": {
+        "checkpoint": ["65fd1f04cb4c5847d86a9ed8ba31ac1a"],
+        "google_checkpoint_id": ["1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP"],
+        "google_calibrator_id": "1yDq1_A5w-fSdxzq4K2YSBRNcQQkDnH0K",
+    },
+    "sybil_ensemble": {
+        "checkpoint": [
+            "28a7cd44f5bcd3e6cc760b65c7e0d54d",
+            "56ce1a7d241dc342982f5466c4a9d7ef",
+            "624407ef8e3a2a009f9fa51f9846fe9a",
+            "64a91b25f84141d32852e75a3aec7305",
+            "65fd1f04cb4c5847d86a9ed8ba31ac1a",
+        ],
+        "google_checkpoint_id": [
+            "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz",
+            "1rscGi1grSxaVGzn-tqKtuAR3ipo0DWgA",
+            "1DV0Ge7n9r8WAvBXyoNRPwyA7VL43csAr",
+            "1Acz_yzdJMpkz3PRrjXy526CjAboMEIHX",
+            "1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP",
+        ],
+        "google_calibrator_id": "1FxHNo0HqXYyiUKE_k2bjatVt9e64J9Li",
+    },
 }
 
 
@@ -61,32 +74,43 @@ class Evaluation(NamedTuple):
 
 
 def download_sybil(name, cache):
+    """Download trained models and calibrator from Google Drive
+
+    Parameters
+    ----------
+    name (str): name of model to use. A key in NAME_TO_FILE
+    cache (str): path to directory where files are downloaded
+
+    Returns
+    -------
+        download_model_paths (list): paths to .ckpt models
+        download_calib_path (str): path to calibrator
+    """
     # Create cache folder if not exists
     cache = os.path.expanduser(cache)
     os.makedirs(cache, exist_ok=True)
 
     # Download if neded
-    file_ids = NAME_TO_FILE[name]
+    model_files = NAME_TO_FILE[name]
 
+    # Download models
     download_model_paths = []
-    download_calib_paths = []
-
-    for model_dict in file_ids:
-        model_path = os.path.join(cache, f"{model_dict['checkpoint']}.ckpt")
-        calib_path = os.path.join(cache, f"{model_dict['checkpoint']}.p")
+    for model_name, google_id in zip(
+        model_files["checkpoint"], model_files["google_checkpoint_id"]
+    ):
+        model_path = os.path.join(cache, f"{model_name}.ckpt")
         if not os.path.exists(model_path):
             print(f"Downloading model to {cache}")
-            gdown.download(
-                id=model_dict["google_checkpoint_id"], output=model_path, quiet=False
-            )
-            # download calibrator
-            gdown.download(
-                id=model_dict["google_calibrator_id"], output=calib_path, quiet=False
-            )
-        download_model_paths.append(model_path)
-        download_calib_paths.append(calib_path)
+            gdown.download(id=google_id, output=model_path, quiet=False)
+            download_model_paths.append(model_path)
 
-    return download_model_paths, download_calib_paths
+    # download calibrator
+    download_calib_path = os.path.join(cache, f"{name}.p")
+    gdown.download(
+        id=model_files["google_calibrator_id"], output=download_calib_path, quiet=False
+    )
+
+    return download_model_paths, download_calib_path
 
 
 class Sybil:
@@ -94,7 +118,7 @@ class Sybil:
         self,
         name_or_path: Union[List[str], str] = "sybil_base",
         cache: str = "~/.sybil/",
-        calibrator_path: Optional[List[str]] = None,
+        calibrator_path: Optional[str] = None,
         device: Optional[str] = None,
     ):
         """Initialize a trained Sybil model for inference.
@@ -106,8 +130,8 @@ class Sybil:
             to a sybil checkpoint.
         cache: str
             Directory to download model checkpoints to
-        calibrator_path: list
-            Paths to calibrator pickle files corresponding with model files
+        calibrator_path: str
+            Path to calibrator pickle file corresponding with model
         device: str
             If provided, will run inference using this device.
             By default uses GPU, if available.
@@ -124,6 +148,10 @@ class Sybil:
                 )
             )
 
+        # Check calibrator path before continuing
+        if (calibrator_path is not None) and (not os.path.exists(calibrator_path)):
+            raise ValueError(f"Path not found for calibrator {calibrator_path}")
+
         # Set device
         if device is not None:
             self.device = device
@@ -134,14 +162,8 @@ class Sybil:
         for path in name_or_path:
             self.ensemble.append(self.load_model(path))
 
-        self.calibrators = []
         if calibrator_path is not None:
-            for path in calibrator_path:
-                self.calibrators.append(
-                    pickle.load(open("ResultsDir/sybil_calibrators.p", "rb"))
-                )
-        else:
-            self.calibrators = [None] * len(name_or_path)
+            self.calibrator = pickle.load(open(calibrator_path, "rb"))
 
     def load_model(self, path):
         """Load model from path.
@@ -174,7 +196,7 @@ class Sybil:
         print(f"Loaded model from {path}")
         return model
 
-    def _calibrate(self, calibrator: Optional[dict], scores: np.ndarray) -> np.ndarray:
+    def _calibrate(self, scores: np.ndarray) -> np.ndarray:
         """Calibrate raw predictions
 
         Parameters
@@ -188,13 +210,15 @@ class Sybil:
         -------
             np.ndarray: calibrated risk scores as numpy array
         """
-        if calibrator is None:
+        if self.calibrator is None:
             return scores
 
         calibrated_scores = []
         for YEAR in range(scores.shape[1]):
             probs = scores[:, YEAR].reshape(-1, 1)
-            probs = calibrator["Year{}".format(YEAR + 1)].predict_proba(probs)[:, 1]
+            probs = self.calibrator["Year{}".format(YEAR + 1)].predict_proba(probs)[
+                :, 1
+            ]
             calibrated_scores.append(probs)
 
         return np.stack(calibrated_scores, axis=1)
@@ -202,7 +226,6 @@ class Sybil:
     def _predict(
         self,
         model: SybilNet,
-        calibrator: Optional[dict],
         series: Union[Serie, List[Serie]],
     ) -> np.ndarray:
         """Run predictions over the given serie(s).
@@ -211,8 +234,6 @@ class Sybil:
         ----------
         model: SybilNet
             Instance of SybilNet
-        calibrator: Dict or None
-            Dictionary of sklearn.calibration.CalibratedClassifierCV for each year, otherwise None.
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
 
@@ -238,11 +259,10 @@ class Sybil:
 
             with torch.no_grad():
                 out = model(volume)
-                score = out["logit"].sigmoid().squeeze(0).cpu().numpy().tolist()
+                score = out["logit"].sigmoid().squeeze(0).cpu().numpy()
                 scores.append(score)
 
-        scores = self._calibrate(calibrator, np.stack(scores))
-        return scores
+        return np.stack(scores)
 
     def predict(self, series: Union[Serie, List[Serie]]) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
@@ -259,11 +279,12 @@ class Sybil:
 
         """
         scores = []
-        for sybil, calibrator in zip(self.ensemble, self.calibrators):
-            pred = self._predict(sybil, calibrator, series)
+        for sybil in self.ensemble:
+            pred = self._predict(sybil, series)
             scores.append(pred)
-        scores = np.mean(np.array(scores), axis=0).tolist()
-        return Prediction(scores=scores)
+        scores = np.mean(np.array(scores), axis=0)
+        calib_scores = self._calibrate(scores)
+        return Prediction(scores=calib_scores)
 
     def evaluate(self, series: Union[Serie, List[Serie]]) -> Evaluation:
         """Run evaluation over the given serie(s).
