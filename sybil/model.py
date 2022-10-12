@@ -102,7 +102,7 @@ def download_sybil(name, cache):
         if not os.path.exists(model_path):
             print(f"Downloading model to {cache}")
             gdown.download(id=google_id, output=model_path, quiet=False)
-            download_model_paths.append(model_path)
+        download_model_paths.append(model_path)
 
     # download calibrator
     download_calib_path = os.path.join(cache, f"{name}.p")
