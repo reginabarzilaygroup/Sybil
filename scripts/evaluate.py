@@ -1,43 +1,143 @@
+import os, sys
 from os.path import dirname, realpath
-import sys
+
 sys.path.append(dirname(dirname(realpath(__file__))))
+import csv
 import argparse
-from argparse import Namespace
-import pickle
-from sandstone.learn.metrics.factory import get_metric
-import numpy as np
-import os
+from sybil import Sybil, Serie
+from rich import print
 
-LOGGER_KEYS = ['censors', 'golds'] 
 
-def make_logging_dict(results):
-    logging_dict = {}
-    logging_dict = {k: np.array( results[0].get('test_{}'.format(k), 0) ) for k in LOGGER_KEYS}
-    logging_dict['probs'] = []
-    prob_key = [k.split('_probs')[0] for k in results[0].keys() if 'probs' in k][0]
-    
-    logging_dict['probs'] = np.mean([np.array(r['{}_probs'.format(prob_key)])  for r in results ], axis = 0)
-    
-    return logging_dict
+def parse_csv_dataset(file_path):
+    """
+    Convert a CSV file into a list of Serie objects from the following data:
+        - 'patient_id': str
+        - 'split': str
+        - 'exam_id': str
+        - 'series_id': str
+        - 'ever_has_future_cancer': bool
+        - 'years_to_cancer': int
+        - 'years_to_last_negative_followup': int
+        - 'paths': [str]
+        - 'file_path': str
+        - 'file_type': str
+        - 'pixel_spacing': [float]
+        - 'slice_thickness': float
+        - 'file_or_directory': str
+
+
+    Parameters
+    ----------
+    file_path : str
+        path to csv file
+
+    Returns
+    -------
+    list
+        list of sybil.Serie objects
+    """
+    dataset_dicts = {}
+    _reader = csv.DictReader(open(file_path, "r"))
+    for _row in _reader:
+        row = {
+            k.encode("ascii", "ignore").decode(): v.encode("ascii", "ignore").decode()
+            for k, v in _row.items()
+        }
+        patient_id, exam_id, series_id = (
+            row["patient_id"],
+            row["exam_id"],
+            row["series_id"],
+        )
+        unique_id = "{}_{}_{}".format(patient_id, exam_id, series_id)
+
+        if not (unique_id in dataset_dicts):
+            dataset_dicts[unique_id] = {
+                "unique_id": unique_id,
+                "patient_id": patient_id,
+                "exam_id": exam_id,
+                "series_id": series_id,
+                "ever_has_future_cancer": row["ever_has_future_cancer"],
+                "years_to_cancer": row["years_to_cancer"],
+                "years_to_last_negative_followup": row[
+                    "years_to_last_negative_followup"
+                ],
+                "file_type": row["file_type"],
+                "pixel_spacing": row["pixel_spacing"],
+                "slice_thickness": row["slice_thickness"],
+            }
+            if row["file_or_directory"] == "directory":
+                assert (
+                    row["file_type"] == "dicom"
+                ), "Only DICOM files when a directory is provided"
+                dicom_files = os.listdir(row["file_path"])
+                dataset_dicts[unique_id]["paths"] = [
+                    os.path.join(row["file_path"], f) for f in dicom_files
+                ]
+
+            elif row["file_or_directory"] == "file":
+                dataset_dicts[unique_id]["paths"] = [row["file_path"]]
+
+            else:
+                raise ValueError("file_or_directory must be 'file' or 'directory'")
+
+        elif (unique_id in dataset_dicts) and (row["file_or_directory"] == "file"):
+            dataset_dicts[unique_id]["paths"].append(row["file_path"])
+
+    dataset = []
+    for unique_id, series_dict in dataset_dicts.items():
+        censor_time = (
+            row["years_to_cancer"]
+            if row["ever_has_future_cancer"]
+            else row["years_to_last_negative_followup"]
+        )
+        voxel = series_dict["pixel_spacing"] + [series_dict["slice_thickness"]]
+        dataset.append(
+            Serie(
+                dicoms=series_dict["paths"],
+                voxel_spacing=voxel,
+                label=row["ever_has_future_cancer"],
+                censor_time=censor_time,
+                file_type=row["file_type"],
+            )
+        )
+
+    return dataset
+
+
+def print_performance(results):
+    """Print performance metrics
+
+    Args:
+        results (NamedTuple): Evaluation named tuple from Sybil.evaluate()
+    """
+    performance = "Performance:\n{}\n".format("-" * 12)
+
+    for i, auc in enumerate(results.auc):
+        performance += f"* {i+1}-Year ROC-AUC: {auc}\n"
+
+    performance += f"* C-Index: {results.c_index}"
+
+    print(performance)
+
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--parent_dir', type = str, default = '/Mounts/rbg-storage1/logs/lung_ct/')
-parser.add_argument('--result_file_names', type = str, nargs = '+', default =  ["7a07ee56c93e2abd100a47542e394bed","1e94034923b44462203cfcf29ae29061","9ff7a8ba3b1f9eb7216f35222b3b8524","18490328d1790f7b6b8c86d97f25103c"])
-parser.add_argument('--test_suffix', type = str, default = 'test')
-parser.add_argument('--metric_name', nargs= '*', type = str, default = 'survival')
+parser.add_argument(
+    "--csv_dataset_path",
+    type=str,
+    default="../files/lung_cancer_dataset.csv",
+    help="Path to csv dataset",
+)
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = parser.parse_args()
-    result_args = [Namespace(**pickle.load(open(os.path.join(args.parent_dir, '{}.results'.format(f)), 'rb'))) for f in args.result_file_names]
-    test_full_paths = [os.path.join(args.parent_dir, '{}.results.{}_.predictions'.format(f, args.test_suffix)) for f in args.result_file_names]
-    test_results = [pickle.load(open(f, 'rb')) for f in  test_full_paths]
 
-    logging_dict = make_logging_dict(test_results)
-    performance_dict = {}
-    metrics = [get_metric(m) for m in args.metric_name]
-    for m in metrics:
-        performance_dict.update( m(logging_dict, result_args[0]) )
+    # make dataset from csv
+    series = parse_csv_dataset(args.csv_dataset_path)
 
-    print(performance_dict)
+    # Load a trained model
+    model = Sybil("sybil_ensemble")
 
+    # You can also evaluate by providing labels
+    results = model.evaluate(series)
+
+    print_performance(results)
