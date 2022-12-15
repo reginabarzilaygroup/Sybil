@@ -41,6 +41,8 @@ See our [documentation](docs/readme.md) for a full description of Sybil's traini
 
 The model expects the input to be an Axial LDCT, where the first frame is of the abdominal region and the last frame is along the clavicles.
 
+When the input is of the `dicom` type, the frames will be automatically sorted. However, for `png` inputs, the path of the PNG files must be in the right anatomical order. 
+
 ## Cite
 
 Coming soon.
