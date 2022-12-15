@@ -37,6 +37,10 @@ python train.py
 
 See our [documentation](docs/readme.md) for a full description of Sybil's training parameters.
 
+## LDCT Orientation
+
+The model expects the input to be an Axial LDCT, where the first frame is of the abdominal region and the last frame is along the clavicles.
+
 ## Cite
 
 Coming soon.
