@@ -37,6 +37,29 @@ python train.py
 
 See our [documentation](docs/readme.md) for a full description of Sybil's training parameters.
 
+
+## Annotations
+
+To help train the model, two fellowship-trained thoracic radiologists jointly annotated suspicious lesions on NLST LDCTs using [MD.AI](https://md.ai) software for all participants who developed cancer within 1 year after an LDCT. Each lesion’s volume was marked with bounding boxes on contiguous thin-cut axial images. The “ground truth” annotations were informed by the imaging appearance and the clinical data provided by the NLST, i.e., the series and image number of cancerous nodules and the anatomical location of biopsy-confirmed lung cancers. For these participants, lesions in the location of subsequently diagnosed cancers were also annotated, even if the precursor lesion lacked imaging features specific for cancer. 
+
+Annotations are availble to download in JSON format [here](https://drive.google.com/file/d/19aa5yIHPWu3NtjqvXDc8NYB2Ub9V-4WM/view?usp=share_link). The JSON file is structured as below, where `(x,y)` refers to the top left corner of the bounding box, and all values are normlized to the image size (512,512). 
+
+```
+{
+  series1_id: {   # Series Instance UID
+    image1_id: [  # SOP Instance UID / file name
+      {"x": x_axis_value, "y": y_axis_value, "height": bounding_box_heigh, "width": bounding_box_width}, # bounding box 1
+      {"x": x_axis_value, "y": y_axis_value, "height": bounding_box_heigh, "width": bounding_box_width}, # bounding box 2
+      ...
+      ],
+    image2_id: [],
+    ...
+  }
+  series2_id: {},
+  ...
+}
+```
+
 ## Cite
 
 Coming soon.
