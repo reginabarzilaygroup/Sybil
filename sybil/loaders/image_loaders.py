@@ -4,6 +4,7 @@ import torch
 import pydicom
 from pydicom.pixel_data_handlers.util import apply_modality_lut
 import numpy as np
+import pylibjpeg
 
 LOADING_ERROR = "LOADING ERROR! {}"
 
