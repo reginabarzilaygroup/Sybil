@@ -38,6 +38,13 @@ python train.py
 See our [documentation](docs/readme.md) for a full description of Sybil's training parameters.
 
 
+## LDCT Orientation
+
+The model expects the input to be an Axial LDCT, where the first frame is of the abdominal region and the last frame is along the clavicles.
+
+When the input is of the `dicom` type, the frames will be automatically sorted. However, for `png` inputs, the path of the PNG files must be in the right anatomical order. 
+
+
 ## Annotations
 
 To help train the model, two fellowship-trained thoracic radiologists jointly annotated suspicious lesions on NLST LDCTs using [MD.AI](https://md.ai) software for all participants who developed cancer within 1 year after an LDCT. Each lesion’s volume was marked with bounding boxes on contiguous thin-cut axial images. The “ground truth” annotations were informed by the imaging appearance and the clinical data provided by the NLST, i.e., the series and image number of cancerous nodules and the anatomical location of biopsy-confirmed lung cancers. For these participants, lesions in the location of subsequently diagnosed cancers were also annotated, even if the precursor lesion lacked imaging features specific for cancer. 
@@ -62,5 +69,13 @@ Annotations are availble to download in JSON format [here](https://drive.google.
 
 ## Cite
 
-Coming soon.
-
+```
+@article{mikhael2023sybil,
+  title={Sybil: a validated deep learning model to predict future lung cancer risk from a single low-dose chest computed tomography},
+  author={Mikhael, Peter G and Wohlwend, Jeremy and Yala, Adam and Karstens, Ludvig and Xiang, Justin and Takigami, Angelo K and Bourgouin, Patrick P and Chan, PuiYee and Mrah, Sofiane and Amayri, Wael and Juan, Yu-Hsiang and Yang, Cheng-Ta and Wan, Yung-Liang and Lin, Gigin and Sequist, Lecia V and Fintelmann, Florian J. and Barzilay, Regina},
+  journal={Journal of Clinical Oncology},
+  pages={JCO--22},
+  year={2023},
+  publisher={Wolters Kluwer Health}
+}
+```
