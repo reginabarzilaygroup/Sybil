@@ -20,13 +20,9 @@ from sybil.datasets.utils import (
 import copy
 from sybil.datasets.nlst_risk_factors import NLSTRiskFactorVectorizer
 
-METADATA_FILENAME = {"google_test": "NLST/full_nlst_google.json"}
+GOOGLE_SPLITS_FILENAME = "../../files/Shetty_et_al(Google)_data_splits.p"
 
-GOOGLE_SPLITS_FILENAME = (
-    "/Mounts/rbg-storage1/datasets/NLST/Shetty_et_al(Google)/data_splits.p"
-)
-
-CORRUPTED_PATHS = "/Mounts/rbg-storage1/datasets/NLST/corrupted_img_paths.pkl"
+CORRUPTED_PATHS = "../../files/corrupted_img_paths.pkl"
 
 CT_ITEM_KEYS = [
     "pid",
@@ -223,7 +219,7 @@ class NLST_Survival_Dataset(data.Dataset):
         # check if restricting to specific slice thicknesses
         slice_thickness = series_data["reconthickness"][0]
         wrong_thickness = (self.args.slice_thickness_filter is not None) and (
-            slice_thickness not in self.args.slice_thickness_filter
+            slice_thickness > self.args.slice_thickness_filter or (slice_thickness < 0)
         )
 
         # check if valid label (info is not missing)
@@ -485,10 +481,6 @@ class NLST_Survival_Dataset(data.Dataset):
             meta[idx]["split"] = institute_to_split[meta[idx]["pt_metadata"]["cen"][0]]
 
     @property
-    def METADATA_FILENAME(self):
-        return METADATA_FILENAME["google_test"]
-
-    @property
     def CORRUPTED_PATHS(self):
         return pickle.load(open(CORRUPTED_PATHS, "rb"))
 
@@ -521,14 +513,26 @@ class NLST_Survival_Dataset(data.Dataset):
 
         if sample["series"] in self.annotations_metadata:
             # store annotation(s) data (x,y,width,height) for each slice
-            sample["annotations"] = [
-                {
-                    "image_annotations": self.annotations_metadata[
-                        sample["series"]
-                    ].get(os.path.splitext(os.path.basename(path))[0], None)
-                }
-                for path in sample["paths"]
-            ]
+            if (
+                self.args.img_file_type == "dicom"
+            ):  # no file extension, so os.path.splitext breaks behavior
+                sample["annotations"] = [
+                    {
+                        "image_annotations": self.annotations_metadata[
+                            sample["series"]
+                        ].get(os.path.basename(path), None)
+                    }
+                    for path in sample["paths"]
+                ]
+            else:  # expects file extension to exist, so use os.path.splitext
+                sample["annotations"] = [
+                    {
+                        "image_annotations": self.annotations_metadata[
+                            sample["series"]
+                        ].get(os.path.splitext(os.path.basename(path))[0], None)
+                    }
+                    for path in sample["paths"]
+                ]
         else:
             sample["annotations"] = [
                 {"image_annotations": None} for path in sample["paths"]
@@ -637,111 +641,6 @@ class NLST_Survival_Dataset(data.Dataset):
         if self.args.slice_thickness_filter is not None:
             raise ValueError("THICKNESS > 2.5")
         return 4
-
-
-class NLST_for_PLCO(NLST_Survival_Dataset):
-    """
-    Dataset for risk factor-based risk model
-    """
-
-    def get_volume_dict(
-        self, series_id, series_dict, exam_dict, pt_metadata, pid, split
-    ):
-        series_data = series_dict["series_data"]
-        screen_timepoint = series_data["study_yr"][0]
-        assert screen_timepoint == exam_dict["screen_timepoint"]
-
-        y, y_seq, y_mask, time_at_event = self.get_label(pt_metadata, screen_timepoint)
-
-        exam_int = int(
-            "{}{}{}".format(
-                int(pid), int(screen_timepoint), int(series_id.split(".")[-1][-3:])
-            )
-        )
-
-        riskfactors = self.get_risk_factors(
-            pt_metadata, screen_timepoint, return_dict=True
-        )
-
-        riskfactors["education"] = EDUCAT_LEVEL.get(riskfactors["education"], -1)
-        riskfactors["race"] = RACE_ID_KEYS.get(pt_metadata["race"][0], -1)
-
-        sample = {
-            "y": int(y),
-            "time_at_event": time_at_event,
-            "y_seq": y_seq,
-            "y_mask": y_mask,
-            "exam_str": "{}_{}".format(exam_dict["exam"], series_id),
-            "exam": exam_int,
-            "accession": exam_dict["accession_number"],
-            "series": series_id,
-            "study": series_data["studyuid"][0],
-            "screen_timepoint": screen_timepoint,
-            "pid": pid,
-        }
-        sample.update(riskfactors)
-
-        if (
-            riskfactors["education"] == -1
-            or riskfactors["race"] == -1
-            or pt_metadata["weight"][0] == -1
-            or pt_metadata["height"][0] == -1
-        ):
-            return {}
-
-        return sample
-
-
-class NLST_for_PLCO_Screening(NLST_for_PLCO):
-    def create_dataset(self, split_group):
-        generated_lung_rads = pickle.load(
-            open("/data/rsg/mammogram/NLST/nlst_acc2lungrads.p", "rb")
-        )
-        dataset = super().create_dataset(split_group)
-        # get lung rads for each year
-        pid2lungrads = {}
-        for d in dataset:
-            lungrads = generated_lung_rads[d["exam"]]
-            if d["pid"] in pid2lungrads:
-                pid2lungrads[d["pid"]][d["screen_timepoint"]] = lungrads
-            else:
-                pid2lungrads[d["pid"]] = {d["screen_timepoint"]: lungrads}
-        plco_results_dataset = []
-        for d in dataset:
-            if len(pid2lungrads[d["pid"]]) < 3:
-                continue
-            is_third_screen = d["screen_timepoint"] == 2
-            is_1yr_ca_free = (d["y"] and d["time_at_event"] > 0) or (not d["y"])
-            if is_third_screen and is_1yr_ca_free:
-                d["scr_group_coef"] = self.get_screening_group(pid2lungrads[d["pid"]])
-                for k in ["age", "years_since_quit_smoking", "smoking_duration"]:
-                    d[k] = d[k] + 1
-                plco_results_dataset.append(d)
-            else:
-                continue
-        return plco_results_dataset
-
-    def get_screening_group(self, lung_rads_dict):
-        """doi:10.1001/jamanetworkopen.2019.0204 Table 1"""
-        scr1, scr2, scr3 = lung_rads_dict[0], lung_rads_dict[1], lung_rads_dict[2]
-
-        if all([not scr1, not scr2, not scr3]):
-            return 0
-        elif (not scr3) and ((not scr1) or (not scr2)):
-            return 0.6554117
-        elif ((not scr3) and all([scr1, scr2])) or (
-            all([not scr1, not scr2]) and (scr3)
-        ):
-            return 0.9798233
-        elif (
-            (all([scr1, scr3]) and not scr2)
-            or (not scr1 and all([scr2, scr3]))
-            or (all([scr1, scr2, scr3]))
-        ):
-            return 2.1940610
-        raise ValueError(
-            "Screen {} has not equivalent PLCO group".format(lung_rads_dict)
-        )
 
 
 class NLST_Risk_Factor_Task(NLST_Survival_Dataset):

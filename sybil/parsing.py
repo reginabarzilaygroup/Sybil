@@ -169,7 +169,7 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--img_dir",
         type=str,
-        default="/data/rsg/mammogram/NLST/nlst-ct-png",
+        required=True,
         help="Dir of images. Note, image path in dataset jsons should stem from here",
     )
     parser.add_argument(
@@ -188,7 +188,7 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--dataset_file_path",
         type=str,
-        default="/Mounts/rbg-storage1/datasets/NLST/full_nlst_google.json",
+        required=True,
         help="Path to dataset file either as json or csv",
     )
     parser.add_argument(
