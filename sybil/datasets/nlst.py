@@ -382,7 +382,9 @@ class NLST_Survival_Dataset(data.Dataset):
                 + path[path.find("nlst-ct-png") + len("nlst-ct-png") :]
                 for path in sorted_img_paths
             ]
-        if self.args.img_file_type == "dicom":
+        if (
+            self.args.img_file_type == "dicom"
+        ):  # ! NOTE: removing file extension affects get_ct_annotations mapping path to annotation
             sorted_img_paths = [
                 path.replace("nlst-ct-png", "nlst-ct").replace(".png", "")
                 for path in sorted_img_paths
@@ -521,14 +523,26 @@ class NLST_Survival_Dataset(data.Dataset):
 
         if sample["series"] in self.annotations_metadata:
             # store annotation(s) data (x,y,width,height) for each slice
-            sample["annotations"] = [
-                {
-                    "image_annotations": self.annotations_metadata[
-                        sample["series"]
-                    ].get(os.path.splitext(os.path.basename(path))[0], None)
-                }
-                for path in sample["paths"]
-            ]
+            if (
+                self.args.img_file_type == "dicom"
+            ):  # no file extension, so os.path.splitext breaks behavior
+                sample["annotations"] = [
+                    {
+                        "image_annotations": self.annotations_metadata[
+                            sample["series"]
+                        ].get(os.path.basename(path), None)
+                    }
+                    for path in sample["paths"]
+                ]
+            else:  # expects file extension to exist, so use os.path.splitext
+                sample["annotations"] = [
+                    {
+                        "image_annotations": self.annotations_metadata[
+                            sample["series"]
+                        ].get(os.path.splitext(os.path.basename(path))[0], None)
+                    }
+                    for path in sample["paths"]
+                ]
         else:
             sample["annotations"] = [
                 {"image_annotations": None} for path in sample["paths"]
