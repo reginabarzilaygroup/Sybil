@@ -153,7 +153,7 @@ class Serie:
 
         Parameters
         ----------
-        `dicom_paths` : List[str]
+        `paths` : List[str]
             List of paths to dicom files
         `voxel_spacing`: Optional[List[float]], optional
             The voxel spacing associated with input CT
