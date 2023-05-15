@@ -4,6 +4,7 @@ import torch
 import pydicom
 from pydicom.pixel_data_handlers.util import apply_modality_lut
 import numpy as np
+from sybil.datasets.utils import get_scaled_annotation_mask
 
 LOADING_ERROR = "LOADING ERROR! {}"
 
@@ -14,7 +15,12 @@ class OpenCVLoader(abstract_loader):
         """
         loads as grayscale image
         """
-        return {"input": cv2.imread(path, 0) }
+        mask = (
+            get_scaled_annotation_mask(sample["annotations"], self.args)
+            if self.args.use_annotations
+            else None
+        )
+        return {"input": cv2.imread(path, 0), "mask": mask}
 
     @property
     def cached_extension(self):
@@ -28,6 +34,11 @@ class DicomLoader(abstract_loader):
         self.window_width = 1500
 
     def load_input(self, path, sample):
+        mask = (
+            get_scaled_annotation_mask(sample["annotations"], self.args)
+            if self.args.use_annotations
+            else None
+        )
         try:
             dcm = pydicom.dcmread(path)
             dcm = apply_modality_lut(dcm.pixel_array, dcm)
@@ -35,7 +46,7 @@ class DicomLoader(abstract_loader):
             arr = arr//256 # parity with images loaded as 8 bit
         except Exception:
             raise Exception(LOADING_ERROR.format("COULD NOT LOAD DICOM."))
-        return {"input": arr}
+        return {"input": arr, "mask": mask}
 
     @property
     def cached_extension(self):

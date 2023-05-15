@@ -48,7 +48,7 @@ python train.py \
     --num_images 200 \
     --use_only_thin_cuts_for_ct \
     --slice_thickness_filter 2.5 \
-    --resample_pixel_spacing_prob 0.5 \
+    --resample_pixel_spacing_prob 1.0 \
     --use_annotations \
     --region_annotations_filepath /path/to/annot_dir/annotations_122020.json \
     --dataset_file_path /path/to/json_dir/nlst_dataset.json \

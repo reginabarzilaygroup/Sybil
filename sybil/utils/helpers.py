@@ -6,8 +6,6 @@ SUPPORTED_DATASETS = {
     "validation": CSVDataset,
     "nlst": NLST_Survival_Dataset,
     "nlst_risk_factors": NLST_Risk_Factor_Task,
-    "nlst_for_plco2012": NLST_for_PLCO,
-    "nlst_for_plco2019": NLST_for_PLCO_Screening,
     "mgh": MGH_Screening,
 }
 
