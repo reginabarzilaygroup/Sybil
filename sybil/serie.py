@@ -129,7 +129,7 @@ class Serie:
             CT volume of shape (1, C, N, H, W)
         """
 
-        sample = {"seed": np.random.randint(0, 2**32 - 1)}
+        sample = {"seed": np.random.randint(0, 2**32 - 1, dtype=np.int64)}
 
         input_dicts = [self._loader.get_image(path, sample) for path in self._meta.paths]
         
