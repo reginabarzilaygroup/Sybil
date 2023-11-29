@@ -40,6 +40,9 @@ def download_and_extract_zip(zip_file_name, cache_dir, url, demo_data_dir):
 
 
 def main():
+    # Note that this function is named so that pytest will not automatically discover it
+    # It takes a long time to run and potentially a lot of disk space
+
     # Download demo data
     demo_data_url = "https://www.dropbox.com/sh/addq480zyguxbbg/AACJRVsKDL0gpq-G9o3rfCBQa?dl=1"
     expected_scores = [
