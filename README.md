@@ -4,6 +4,15 @@
 
 Lung Cancer Risk Prediction
 
+## Run a regression test
+
+```shell
+python tests/regression_test.py
+```
+
+This will download the`sybil_ensemble` model and sample data, and compare the results to what has previously been calculated.
+
+
 ## Run the model
 
 You can load our pretrained model trained on the NLST dataset, and score a given DICOM serie as follows:
