@@ -65,12 +65,14 @@ NAME_TO_FILE = {
 
 class Prediction(NamedTuple):
     scores: List[List[float]]
+    attentions: List[Dict[str, np.ndarray]] = None
 
 
 class Evaluation(NamedTuple):
     auc: List[float]
     c_index: float
     scores: List[List[float]]
+    attentions: List[Dict[str, np.ndarray]] = None
 
 
 def download_sybil(name, cache):
@@ -230,6 +232,7 @@ class Sybil:
         self,
         model: SybilNet,
         series: Union[Serie, List[Serie]],
+        return_attentions: bool = False,
     ) -> np.ndarray:
         """Run predictions over the given serie(s).
 
@@ -252,6 +255,7 @@ class Sybil:
             raise ValueError("Expected either a Serie object or list of Serie objects.")
 
         scores: List[List[float]] = []
+        attentions: List[Dict[str, np.ndarray]] = []
         for serie in series:
             if not isinstance(serie, Serie):
                 raise ValueError("Expected a list of Serie objects.")
@@ -264,10 +268,25 @@ class Sybil:
                 out = model(volume)
                 score = out["logit"].sigmoid().squeeze(0).cpu().numpy()
                 scores.append(score)
+                if return_attentions:
+                    attentions.append(
+                        {
+                            "image_attention_1": out["image_attention_1"]
+                            .detach()
+                            .cpu(),
+                            "volume_attention_1": out["volume_attention_1"]
+                            .detach()
+                            .cpu(),
+                        }
+                    )
+        if return_attentions:
+            return Prediction(scores=np.stack(scores), attentions=attentions)
 
-        return np.stack(scores)
+        return Prediction(scores=np.stack(scores))
 
-    def predict(self, series: Union[Serie, List[Serie]]) -> Prediction:
+    def predict(
+        self, series: Union[Serie, List[Serie]], return_attentions: bool = False
+    ) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
 
         Parameters
@@ -282,14 +301,29 @@ class Sybil:
 
         """
         scores = []
+        attentions_ = []
         for sybil in self.ensemble:
             pred = self._predict(sybil, series)
-            scores.append(pred)
+            scores.append(pred.scores)
+            if return_attentions:
+                attentions_.append(pred.attentions)
         scores = np.mean(np.array(scores), axis=0)
         calib_scores = self._calibrate(scores).tolist()
+        if return_attentions:
+            attentions = []
+            for i in range(len(series)):
+                att = {}
+                for key in pred.attentions[0][i].keys():
+                    att[key] = [
+                        pred.attentions[j][i][key] for j in range(len(self.ensemble))
+                    ]
+                attentions.append(att)
+            return Prediction(scores=calib_scores, attentions=attentions)
         return Prediction(scores=calib_scores)
 
-    def evaluate(self, series: Union[Serie, List[Serie]]) -> Evaluation:
+    def evaluate(
+        self, series: Union[Serie, List[Serie]], return_attentions: bool = False
+    ) -> Evaluation:
         """Run evaluation over the given serie(s).
 
         Parameters
@@ -315,7 +349,8 @@ class Sybil:
             raise ValueError("All series must have a label for evaluation")
 
         # Get scores and labels
-        scores = self.predict(series).scores
+        predictions = self.predict(series, return_attentions)
+        scores = predictions.scores
         labels = [serie.get_label(self._max_followup) for serie in series]
 
         # Convert to format for survival metrics
@@ -331,4 +366,9 @@ class Sybil:
         auc = [float(out[f"{i + 1}_year_auc"]) for i in range(self._max_followup)]
         c_index = float(out["c_index"])
 
+        if return_attentions:
+            attentions = predictions.attentions
+            return Evaluation(
+                auc=auc, c_index=c_index, scores=scores, attentions=attentions
+            )
         return Evaluation(auc=auc, c_index=c_index, scores=scores)

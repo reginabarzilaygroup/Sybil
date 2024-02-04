@@ -19,6 +19,6 @@ finally:
 
 from sybil.model import Sybil
 from sybil.serie import Serie
+from sybil.utils.visualization import visualize_attentions
 
-
-__all__ = ["Sybil", "Serie"]
+__all__ = ["Sybil", "Serie", "visualize_attentions"]
