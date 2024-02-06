@@ -303,7 +303,7 @@ class Sybil:
         scores = []
         attentions_ = []
         for sybil in self.ensemble:
-            pred = self._predict(sybil, series)
+            pred = self._predict(sybil, series, return_attentions)
             scores.append(pred.scores)
             if return_attentions:
                 attentions_.append(pred.attentions)
@@ -313,9 +313,9 @@ class Sybil:
             attentions = []
             for i in range(len(series)):
                 att = {}
-                for key in pred.attentions[0][i].keys():
+                for key in pred.attentions[0].keys():
                     att[key] = [
-                        pred.attentions[j][i][key] for j in range(len(self.ensemble))
+                        attentions_[j][i][key] for j in range(len(self.ensemble))
                     ]
                 attentions.append(att)
             return Prediction(scores=calib_scores, attentions=attentions)
