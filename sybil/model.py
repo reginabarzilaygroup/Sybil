@@ -169,6 +169,8 @@ class Sybil:
 
         if calibrator_path is not None:
             self.calibrator = pickle.load(open(calibrator_path, "rb"))
+        else:
+            self.calibrator = None
 
     def load_model(self, path):
         """Load model from path.
