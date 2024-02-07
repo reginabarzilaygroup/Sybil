@@ -44,7 +44,7 @@ You can replicate the results from our model using our training script:
 python train.py
 ```
 
-See our [documentation](docs/readme.md) for a full description of Sybil's training parameters.
+See our [documentation](docs/readme.md) for a full description of Sybil's training parameters. Additional information on the training process can be found on the [train](https://github.com/reginabarzilaygroup/Sybil/tree/train) branch of this repository.
 
 
 ## LDCT Orientation
@@ -74,6 +74,40 @@ Annotations are availble to download in JSON format [here](https://drive.google.
   series2_id: {},
   ...
 }
+```
+
+## Attention Scores
+
+The multi-attention pooling layer aims to learn the importance of each slice in the 3D volume and the importance of each pixel in the 2D slice. During training, these are supervised by bounding boxes of the cancerous nodules. This is a soft attention mechanism, and the model's primary task is to predict the risk of lung cancer. However, the attention scores can be extracted and used to visualize the model's focus on the 3D volume and the 2D slices. 
+
+To extract the attention scores, you can use the  `return_attentions` argument as follows:
+
+```python
+
+results = model.predict([serie], return_attentions=True)
+
+attentions = results.attentions
+
+```
+
+The `attentions` will be a list of length equal to the number of series. Each series has a dictionary with the following keys:
+
+- `image_attention_1`: log-softmax attention scores over the pixels in the 2D slice. This will be a list of length equal to the size of the model ensemble.
+- `volume_attention_1`: log-softmax attention scores over each slice in the 3D volume. This will be a list of length equal to the size of the model ensemble.
+
+To visualize the attention scores, you can use the following code. This will return a list of 2D images, where the attention scores are overlaid on the original images. If you provide a `save_directory`, the images will be saved as a GIF. If multiple series are provided, the function will return a list of lists, one for each series.
+
+```python
+
+from sybil import visualize_attentions
+
+series_with_attention = visualize_attentions(
+    series,
+    attentions = attentions,
+    save_directory = "path_to_save_directory",
+    gain = 3, 
+)
+
 ```
 
 ## Cite
