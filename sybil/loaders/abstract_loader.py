@@ -131,10 +131,11 @@ class cache:
 class abstract_loader:
     __metaclass__ = ABCMeta
 
-    def __init__(self, cache_path, augmentations, args):
+    def __init__(self, cache_path, augmentations, args, apply_augmentations=True):
         self.pad_token = IMG_PAD_TOKEN
         self.augmentations = augmentations
         self.args = args
+        self.apply_augmentations = apply_augmentations
         if cache_path is not None:
             self.use_cache = True
             self.cache = cache(cache_path, self.cached_extension)
@@ -152,13 +153,8 @@ class abstract_loader:
     def cached_extension(self):
         pass
 
-    @property
-    @abstractmethod
-    def apply_augmentations(self):
-        return True
-
     def configure_path(self, path, sample):
-        return path 
+        return path
 
     def get_image(self, path, sample):
         """

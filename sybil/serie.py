@@ -130,8 +130,7 @@ class Serie:
             List of CT slices of shape (1, C, H, W)
         """
 
-        loader = get_sample_loader("test", self._args)
-        loader.apply_augmentations = False
+        loader = get_sample_loader("test", self._args, apply_augmentations=False)
         input_dicts = [loader.get_image(path, {}) for path in self._meta.paths]
         images = [i["input"] for i in input_dicts]
         return images
