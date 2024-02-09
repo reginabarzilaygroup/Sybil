@@ -92,8 +92,8 @@ attentions = results.attentions
 
 The `attentions` will be a list of length equal to the number of series. Each series has a dictionary with the following keys:
 
-- `image_attention_1`: log-softmax attention scores over the pixels in the 2D slice. This will be a list of length equal to the size of the model ensemble.
-- `volume_attention_1`: log-softmax attention scores over each slice in the 3D volume. This will be a list of length equal to the size of the model ensemble.
+- `image_attention_1`: attention scores (as logits) over the pixels in the 2D slice. This will be a list of length equal to the size of the model ensemble.
+- `volume_attention_1`: attention scores (as logits) over each slice in the 3D volume. This will be a list of length equal to the size of the model ensemble.
 
 To visualize the attention scores, you can use the following code. This will return a list of 2D images, where the attention scores are overlaid on the original images. If you provide a `save_directory`, the images will be saved as a GIF. If multiple series are provided, the function will return a list of lists, one for each series.
 

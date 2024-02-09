@@ -2,21 +2,21 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from sybil.serie import Serie
-from typing import Dict, List
+from typing import Dict, List, Union
 import os
 import imageio
 
 
 def visualize_attentions(
-    series: Serie,
-    attentions: List[Dict[str, torch.Tensor]],
+    series: Union[Serie, List[Serie]],
+    attentions: List[Dict[str, np.ndarray]],
     save_directory: str = None,
     gain: int = 3,
 ) -> List[List[np.ndarray]]:
     """
     Args:
         series (Serie): series object
-        attention_dict (Dict[str, torch.Tensor]): attention dictionary output from model
+        attentions (Dict[str, np.ndarray]): attention dictionary output from model
         save_directory (str, optional): where to save the images. Defaults to None.
         gain (int, optional): how much to scale attention values by for visualization. Defaults to 3.
 
@@ -32,10 +32,12 @@ def visualize_attentions(
         a1 = attentions[serie_idx]["image_attention_1"]
         v1 = attentions[serie_idx]["volume_attention_1"]
 
+        a1 = torch.Tensor(a1)
+        v1 = torch.Tensor(v1)
+
         # take mean attention over ensemble
-        if len(a1) > 1:
-            a1 = torch.exp(torch.stack(a1)).mean(0)
-            v1 = torch.exp(torch.stack(v1)).mean(0)
+        a1 = torch.exp(a1).mean(0)
+        v1 = torch.exp(v1).mean(0)
 
         attention = a1 * v1.unsqueeze(-1)
         attention = attention.view(1, 25, 16, 16)

@@ -22,8 +22,8 @@ class OpenCVLoader(abstract_loader):
 
 
 class DicomLoader(abstract_loader):
-    def __init__(self, cache_path, augmentations, args):
-        super(DicomLoader, self).__init__(cache_path, augmentations, args)
+    def __init__(self, cache_path, augmentations, args, apply_augmentations=True):
+        super(DicomLoader, self).__init__(cache_path, augmentations, args, apply_augmentations)
         self.window_center = -600
         self.window_width = 1500
 
@@ -40,6 +40,7 @@ class DicomLoader(abstract_loader):
     @property
     def cached_extension(self):
         return ""
+
 
 def apply_windowing(image, center, width, bit_size=16):
     """Windowing function to transform image pixels for presentation.
