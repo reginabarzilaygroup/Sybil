@@ -158,7 +158,11 @@ def concat_all_gather(tensor):
     return output
 
 
-def get_sample_loader(split_group: Literal["train", "dev", "test"], args: Namespace):
+def get_sample_loader(
+    split_group: Literal["train", "dev", "test"],
+    args: Namespace,
+    apply_augmentations=True,
+):
     """[summary]
 
     Parameters
@@ -167,6 +171,7 @@ def get_sample_loader(split_group: Literal["train", "dev", "test"], args: Namesp
         dataset split according to which the augmentation is selected (choices are ['train', 'dev', 'test'])
     ``args`` : Namespace
         global args
+    ``apply_augmentations`` : bool, optional (default=True)
 
     Returns
     -------
@@ -180,8 +185,8 @@ def get_sample_loader(split_group: Literal["train", "dev", "test"], args: Namesp
     """
     augmentations = get_augmentations(split_group, args)
     if args.img_file_type == "dicom":
-        return DicomLoader(args.cache_path, augmentations, args)
+        return DicomLoader(args.cache_path, augmentations, args, apply_augmentations)
     elif args.img_file_type == "png":
-        return OpenCVLoader(args.cache_path, augmentations, args)
+        return OpenCVLoader(args.cache_path, augmentations, args, apply_augmentations)
     else:
         raise NotImplementedError

@@ -4,7 +4,7 @@ import os
 import requests
 import zipfile
 
-from sybil import Serie, Sybil
+from sybil import Serie, Sybil, visualize_attentions
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 project_directory = os.path.dirname(script_directory)
@@ -68,15 +68,18 @@ def main():
     # Load a trained model
     model = Sybil("sybil_ensemble")
 
-    # myprint(f"Beginning prediction using {num_files} from {image_data_dir}")
+    myprint(f"Beginning prediction using {num_files} files from {image_data_dir}")
 
     # Get risk scores
     serie = Serie(dicom_files)
-    prediction = model.predict([serie])[0]
-    actual_scores = prediction[0]
+    series = [serie]
+    prediction = model.predict(series, return_attentions=True)
+    actual_scores = prediction.scores[0]
     count = len(actual_scores)
 
-    # myprint(f"Prediction finished. Results\n{actual_scores}")
+    myprint(f"Prediction finished. Results\n{actual_scores}")
+
+    # pprint.pprint(f"Prediction object: {prediction}")
 
     assert len(expected_scores) == len(actual_scores), f"Unexpected score length {count}"
 
@@ -87,6 +90,13 @@ def main():
         all_elements_match &= does_match
 
     print(f"Data URL: {demo_data_url}\nAll {count} elements match: {all_elements_match}")
+
+    series_with_attention = visualize_attentions(
+        series,
+        attentions=prediction.attentions,
+        save_directory="regression_test_output",
+        gain=3,
+    )
 
 
 if __name__ == "__main__":

@@ -65,12 +65,14 @@ NAME_TO_FILE = {
 
 class Prediction(NamedTuple):
     scores: List[List[float]]
+    attentions: List[Dict[str, np.ndarray]] = None
 
 
 class Evaluation(NamedTuple):
     auc: List[float]
     c_index: float
     scores: List[List[float]]
+    attentions: List[Dict[str, np.ndarray]] = None
 
 
 def download_sybil(name, cache):
@@ -167,6 +169,8 @@ class Sybil:
 
         if calibrator_path is not None:
             self.calibrator = pickle.load(open(calibrator_path, "rb"))
+        else:
+            self.calibrator = None
 
     def load_model(self, path):
         """Load model from path.
@@ -230,7 +234,8 @@ class Sybil:
         self,
         model: SybilNet,
         series: Union[Serie, List[Serie]],
-    ) -> np.ndarray:
+        return_attentions: bool = False,
+    ) -> Prediction:
         """Run predictions over the given serie(s).
 
         Parameters
@@ -239,6 +244,8 @@ class Sybil:
             Instance of SybilNet
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
+        return_attentions : bool
+            If True, returns attention scores for each serie. See README for details.
 
         Returns
         -------
@@ -252,6 +259,7 @@ class Sybil:
             raise ValueError("Expected either a Serie object or list of Serie objects.")
 
         scores: List[List[float]] = []
+        attentions: List[Dict[str, np.ndarray]] = [] if return_attentions else None
         for serie in series:
             if not isinstance(serie, Serie):
                 raise ValueError("Expected a list of Serie objects.")
@@ -263,17 +271,32 @@ class Sybil:
             with torch.no_grad():
                 out = model(volume)
                 score = out["logit"].sigmoid().squeeze(0).cpu().numpy()
-                scores.append(score)
+                scores.append(score.tolist())
+                if return_attentions:
+                    attentions.append(
+                        {
+                            "image_attention_1": out["image_attention_1"]
+                            .detach()
+                            .cpu(),
+                            "volume_attention_1": out["volume_attention_1"]
+                            .detach()
+                            .cpu(),
+                        }
+                    )
 
-        return np.stack(scores)
+        return Prediction(scores=scores, attentions=attentions)
 
-    def predict(self, series: Union[Serie, List[Serie]]) -> Prediction:
+    def predict(
+        self, series: Union[Serie, List[Serie]], return_attentions: bool = False
+    ) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
 
         Parameters
         ----------
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
+        return_attentions : bool
+            If True, returns attention scores for each serie. See README for details.
 
         Returns
         -------
@@ -282,25 +305,48 @@ class Sybil:
 
         """
         scores = []
+        attentions_ = [] if return_attentions else None
+        attention_keys = None
         for sybil in self.ensemble:
-            pred = self._predict(sybil, series)
-            scores.append(pred)
+            pred = self._predict(sybil, series, return_attentions)
+            scores.append(pred.scores)
+            if return_attentions:
+                attentions_.append(pred.attentions)
+                if attention_keys is None:
+                    attention_keys = pred.attentions[0].keys()
+
         scores = np.mean(np.array(scores), axis=0)
         calib_scores = self._calibrate(scores).tolist()
-        return Prediction(scores=calib_scores)
 
-    def evaluate(self, series: Union[Serie, List[Serie]]) -> Evaluation:
+        attentions = None
+        if return_attentions:
+            attentions = []
+            for i in range(len(series)):
+                att = {}
+                for key in attention_keys:
+                    att[key] = np.stack([
+                        attentions_[j][i][key] for j in range(len(self.ensemble))
+                    ])
+                attentions.append(att)
+
+        return Prediction(scores=calib_scores, attentions=attentions)
+
+    def evaluate(
+        self, series: Union[Serie, List[Serie]], return_attentions: bool = False
+    ) -> Evaluation:
         """Run evaluation over the given serie(s).
 
         Parameters
         ----------
         series : Union[Serie, List[Serie]]
             One or multiple series to run evaluation for.
+        return_attentions : bool
+            If True, returns attention scores for each serie. See README for details.
 
         Returns
         -------
         Evaluation
-            Output evaluation. See details for :class:`~sybil.model.Evaluation`".
+            Output evaluation. See details for :class:`~sybil.model.Evaluation`.
 
         """
         if isinstance(series, Serie):
@@ -315,7 +361,8 @@ class Sybil:
             raise ValueError("All series must have a label for evaluation")
 
         # Get scores and labels
-        scores = self.predict(series).scores
+        predictions = self.predict(series, return_attentions)
+        scores = predictions.scores
         labels = [serie.get_label(self._max_followup) for serie in series]
 
         # Convert to format for survival metrics
@@ -331,4 +378,4 @@ class Sybil:
         auc = [float(out[f"{i + 1}_year_auc"]) for i in range(self._max_followup)]
         c_index = float(out["c_index"])
 
-        return Evaluation(auc=auc, c_index=c_index, scores=scores)
+        return Evaluation(auc=auc, c_index=c_index, scores=scores, attentions=predictions.attentions)
