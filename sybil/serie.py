@@ -131,7 +131,7 @@ class Serie:
         """
 
         loader = get_sample_loader("test", self._args, apply_augmentations=False)
-        input_dicts = [loader.get_image(path, {}) for path in self._meta.paths]
+        input_dicts = [loader.get_image(path) for path in self._meta.paths]
         images = [i["input"] for i in input_dicts]
         return images
 
@@ -145,10 +145,8 @@ class Serie:
             CT volume of shape (1, C, N, H, W)
         """
 
-        sample = {"seed": np.random.randint(0, 2**32 - 1)}
-
         input_dicts = [
-            self._loader.get_image(path, sample) for path in self._meta.paths
+            self._loader.get_image(path) for path in self._meta.paths
         ]
 
         x = torch.cat([i["input"].unsqueeze(0) for i in input_dicts], dim=0)

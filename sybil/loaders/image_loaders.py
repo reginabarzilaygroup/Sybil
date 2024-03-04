@@ -10,11 +10,11 @@ LOADING_ERROR = "LOADING ERROR! {}"
 
 class OpenCVLoader(abstract_loader):
 
-    def load_input(self, path, sample):
+    def load_input(self, path):
         """
         loads as grayscale image
         """
-        return {"input": cv2.imread(path, 0) }
+        return {"input": cv2.imread(path, 0)}
 
     @property
     def cached_extension(self):
@@ -27,12 +27,12 @@ class DicomLoader(abstract_loader):
         self.window_center = -600
         self.window_width = 1500
 
-    def load_input(self, path, sample):
+    def load_input(self, path):
         try:
             dcm = pydicom.dcmread(path)
             dcm = apply_modality_lut(dcm.pixel_array, dcm)
             arr = apply_windowing(dcm, self.window_center, self.window_width)
-            arr = arr//256 # parity with images loaded as 8 bit
+            arr = arr//256  # parity with images loaded as 8 bit
         except Exception:
             raise Exception(LOADING_ERROR.format("COULD NOT LOAD DICOM."))
         return {"input": arr}
