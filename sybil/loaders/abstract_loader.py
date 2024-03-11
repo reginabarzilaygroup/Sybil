@@ -59,7 +59,7 @@ def split_augmentations_by_cache(augmentations):
 
 
 def apply_augmentations_and_cache(
-    loaded_input, img_path, augmentations, cache, base_key=""
+    loaded_input, sample, img_path, augmentations, cache, base_key=""
 ):
     """
     Loads the loaded input by its absolute path and apply the augmentations one
@@ -69,7 +69,7 @@ def apply_augmentations_and_cache(
     all_prev_cachable = True
     key = base_key
     for ind, trans in enumerate(augmentations):
-        loaded_input = trans(loaded_input)
+        loaded_input = trans(loaded_input, sample)
         if not all_prev_cachable or not trans.cachable():
             all_prev_cachable = False
         else:
@@ -153,17 +153,17 @@ class abstract_loader:
     def cached_extension(self):
         pass
 
-    def configure_path(self, path):
+    def configure_path(self, path, sample=None):
         return path
 
-    def get_image(self, path):
+    def get_image(self, path, sample=None):
         """
         Returns a transformed image by its absolute path.
         If cache is used - transformed image will be loaded if available,
         and saved to cache if not.
         """
         input_dict = {}
-        input_path = self.configure_path(path)
+        input_path = self.configure_path(path, sample)
 
         if input_path == self.pad_token:
             return self.load_input(input_path)
@@ -172,7 +172,7 @@ class abstract_loader:
             input_dict = self.load_input(input_path)
             # hidden loaders typically do not use augmentation
             if self.apply_augmentations:
-                input_dict = self.composed_all_augmentations(input_dict)
+                input_dict = self.composed_all_augmentations(input_dict, sample)
             return input_dict
 
         if self.args.use_annotations:
@@ -192,6 +192,7 @@ class abstract_loader:
                     if self.apply_augmentations:
                         input_dict = apply_augmentations_and_cache(
                             input_dict,
+                            sample,
                             input_path,
                             post_augmentations,
                             self.cache,
@@ -210,6 +211,7 @@ class abstract_loader:
         if self.apply_augmentations:
             input_dict = apply_augmentations_and_cache(
                 input_dict,
+                sample,
                 input_path,
                 all_augmentations,
                 self.cache,

@@ -80,9 +80,9 @@ class ComposeAug(Abstract_augmentation):
         super(ComposeAug, self).__init__()
         self.augmentations = augmentations
 
-    def __call__(self, input_dict):
+    def __call__(self, input_dict, sample=None):
         for transformer in self.augmentations:
-            input_dict = transformer(input_dict)
+            input_dict = transformer(input_dict, sample)
 
         return input_dict
 
@@ -97,7 +97,7 @@ class ToTensor(Abstract_augmentation):
         self.transform = ToTensorV2()
         self.name = "totensor"
 
-    def __call__(self, input_dict):
+    def __call__(self, input_dict, sample=None):
         input_dict["input"] = torch.from_numpy(input_dict["input"]).float()
         if input_dict.get("mask", None) is not None:
             input_dict["mask"] = torch.from_numpy(input_dict["mask"]).float()
@@ -117,7 +117,7 @@ class Scale_2d(Abstract_augmentation):
         self.set_cachable(width, height)
         self.transform = A.Resize(height, width)
 
-    def __call__(self, input_dict):
+    def __call__(self, input_dict, sample=None):
         out = self.transform(
             image=input_dict["input"], mask=input_dict.get("mask", None)
         )
@@ -140,7 +140,9 @@ class Rotate_Range(Abstract_augmentation):
         self.max_angle = int(kwargs["deg"])
         self.transform = A.Rotate(limit=self.max_angle, p=0.5)
 
-    def __call__(self, input_dict):
+    def __call__(self, input_dict, sample=None):
+        if sample and "seed" in sample:
+            self.set_seed(sample["seed"])
         out = self.transform(
             image=input_dict["input"], mask=input_dict.get("mask", None)
         )
@@ -169,7 +171,7 @@ class Normalize_Tensor_2d(Abstract_augmentation):
             "png",
         ]
 
-    def __call__(self, input_dict):
+    def __call__(self, input_dict, sample=None):
         img = input_dict["input"]
         if len(img.size()) == 2:
             img = img.unsqueeze(0)
@@ -193,7 +195,7 @@ class Force_Num_Chan_Tensor_2d(Abstract_augmentation):
         assert len(kwargs) == 0
         self.args = args
 
-    def __call__(self, input_dict):
+    def __call__(self, input_dict, sample=None):
         img = input_dict["input"]
         mask = input_dict.get("mask", None)
         if mask is not None:
