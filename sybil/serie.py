@@ -1,13 +1,15 @@
 from typing import List, Optional, NamedTuple, Literal
 from argparse import Namespace
-
+import sys
 import torch
 import numpy as np
 import pydicom
 import torchio as tio
 
+
 from sybil.datasets.utils import order_slices, VOXEL_SPACING
-from sybil.utils.loading import get_sample_loader
+from sybil.utils2.loading import get_sample_loader
+import SimpleITK as sitk
 
 
 class Meta(NamedTuple):
@@ -33,7 +35,8 @@ class Serie:
         voxel_spacing: Optional[List[float]] = None,
         label: Optional[int] = None,
         censor_time: Optional[int] = None,
-        file_type: Literal["png", "dicom"] = "dicom",
+        #file_type: Literal["mha", "dicom"] = "dicom",
+        file_type: Literal["mha", "dicom"] = "mha",
         split: Literal["train", "dev", "test"] = "test",
     ):
         """Initialize a Serie.
@@ -63,7 +66,6 @@ class Serie:
         self._censor_time = censor_time
         self._label = label
         args = self._load_args(file_type)
-        self._args = args
         self._loader = get_sample_loader(split, args)
         self._meta = self._load_metadata(dicoms, voxel_spacing, file_type)
         self._check_valid(args)
@@ -105,7 +107,7 @@ class Serie:
             raise ValueError("No label in this serie.")
 
         # First convert months to years
-        year_to_cancer = self._censor_time  # type: ignore
+        year_to_cancer = self._censor_time # type: ignore
 
         y_seq = np.zeros(max_followup, dtype=np.float64)
         y = int((year_to_cancer < max_followup) and self._label)  # type: ignore
@@ -120,21 +122,6 @@ class Serie:
         )
         return Label(y=y, y_seq=y_seq, y_mask=y_mask, censor_time=year_to_cancer)
 
-    def get_raw_images(self) -> List[np.ndarray]:
-        """
-        Load raw images from serie
-
-        Returns
-        -------
-        List[np.ndarray]
-            List of CT slices of shape (1, C, H, W)
-        """
-
-        loader = get_sample_loader("test", self._args, apply_augmentations=False)
-        input_dicts = [loader.get_image(path, {}) for path in self._meta.paths]
-        images = [i["input"] for i in input_dicts]
-        return images
-
     def get_volume(self) -> torch.Tensor:
         """
         Load loaded 3D CT volume
@@ -146,15 +133,32 @@ class Serie:
         """
 
         sample = {"seed": np.random.randint(0, 2**32 - 1)}
+    
 
-        input_dicts = [
-            self._loader.get_image(path, sample) for path in self._meta.paths
-        ]
-
-        x = torch.cat([i["input"].unsqueeze(0) for i in input_dicts], dim=0)
+        input_dicts = [self._loader.get_image(path, sample) for path in self._meta.paths]
+        
+        x = torch.cat( [i["input"].unsqueeze(0) for i in input_dicts], dim = 0)
+        #x = torch.cat([torch.from_numpy(i["input"]).unsqueeze(0) for i in input_dicts], dim = 0)
+        #x = x.unsqueeze(0)
+        
 
         # Convert from (T, C, H, W) to (C, T, H, W)
         x = x.permute(1, 0, 2, 3)
+
+        # affine = torch.eye(4)
+        # affine[0, 0] = self._meta.voxel_spacing[0]  # Row spacing
+        # affine[1, 1] = self._meta.voxel_spacing[1]  # Col spacing
+        # affine[2, 2] = self._meta.thickness  # Slice thickness
+        # affine=torch.diag(self._meta.voxel_spacing)
+        # x = tio.ScalarImage(
+        #     affine=affine,
+        #     #affine=torch.diag(self._meta.voxel_spacing),
+        #     tensor=x.permute(0, 2, 3, 1))
+        
+        # x = self.resample_transform(x)
+        # x = self.padding_transform(x)
+        # x = x.data.permute(0, 3, 1, 2)
+        # x.unsqueeze_(0)
 
         x = tio.ScalarImage(
             affine=torch.diag(self._meta.voxel_spacing),
@@ -164,6 +168,7 @@ class Serie:
         x = self.padding_transform(x)
         x = x.data.permute(0, 3, 1, 2)
         x.unsqueeze_(0)
+        
         return x
 
     def _load_metadata(self, paths, voxel_spacing, file_type):
@@ -176,7 +181,7 @@ class Serie:
         `voxel_spacing`: Optional[List[float]], optional
             The voxel spacing associated with input CT
             as (row spacing, col spacing, slice thickness)
-        `file_type` : Literal['png', 'dicom']
+        `file_type` : Literal['mha', 'dicom']
             File type of CT slices
 
         Returns
@@ -200,16 +205,23 @@ class Serie:
             pixel_spacing = list(map(float, dcm.PixelSpacing))
             manufacturer = dcm.Manufacturer
             voxel_spacing = torch.tensor(pixel_spacing + [thickness, 1])
-        elif file_type == "png":
+
+        # Check if filetype is mha
+        elif file_type == "mha":
             processed_paths = paths
             slice_positions = list(range(len(paths)))
-            thickness = voxel_spacing[-1] if voxel_spacing is not None else None
-            pixel_spacing = []
-            manufacturer = ""
-            voxel_spacing = (
-                torch.tensor(voxel_spacing + [1]) if voxel_spacing is not None else None
-            )
 
+            for path in paths:
+                itk_image = sitk.ReadImage(str(path), sitk.sitkFloat64)
+
+
+            thickness = (float(itk_image.GetMetaData("SliceThickness")))
+            pixelspacingstring = itk_image.GetMetaData("PixelSpacing")
+            pixel_spacing = list(map(float, pixelspacingstring.split()))
+            manufacturer = ""
+            voxel_spacing = torch.tensor(pixel_spacing + [thickness])
+
+            
         meta = Meta(
             paths=processed_paths,
             thickness=thickness,
@@ -226,7 +238,7 @@ class Serie:
 
         Parameters
         ----------
-        file_type : Literal['png', 'dicom']
+        file_type : Literal['mha', 'dicom']
             File type of CT slices
 
         Returns

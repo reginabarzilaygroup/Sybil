@@ -1,10 +1,7 @@
-from argparse import Namespace
-from io import BytesIO
+from typing import NamedTuple, Union, Dict, List, Optional
 import os
-from typing import NamedTuple, Union, Dict, List, Optional, Tuple
-from urllib.request import urlopen
-from zipfile import ZipFile
-# import gdown
+from argparse import Namespace
+import gdown
 
 import torch
 import numpy as np
@@ -12,10 +9,9 @@ import pickle
 
 from sybil.serie import Serie
 from sybil.models.sybil import SybilNet
-from sybil.utils.metrics import get_survival_metrics
+from sybil.utils2.metrics import get_survival_metrics
 
 
-# Leaving this here for a bit; these are IDs to download the models from Google Drive
 NAME_TO_FILE = {
     "sybil_base": {
         "checkpoint": ["28a7cd44f5bcd3e6cc760b65c7e0d54d"],
@@ -66,22 +62,18 @@ NAME_TO_FILE = {
     },
 }
 
-CHECKPOINT_URL = "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.0.3/sybil_checkpoints.zip"
-
 
 class Prediction(NamedTuple):
     scores: List[List[float]]
-    attentions: List[Dict[str, np.ndarray]] = None
 
 
 class Evaluation(NamedTuple):
     auc: List[float]
     c_index: float
     scores: List[List[float]]
-    attentions: List[Dict[str, np.ndarray]] = None
 
 
-def download_sybil_gdrive(name, cache):
+def download_sybil(name, cache):
     """Download trained models and calibrator from Google Drive
 
     Parameters
@@ -122,40 +114,6 @@ def download_sybil_gdrive(name, cache):
         )
 
     return download_model_paths, download_calib_path
-
-
-def download_sybil(name, cache) -> Tuple[List[str], str]:
-    """Download trained models and calibrator"""
-    # Create cache folder if not exists
-    cache = os.path.expanduser(cache)
-    os.makedirs(cache, exist_ok=True)
-
-    # Download models
-    model_files = NAME_TO_FILE[name]
-    checkpoints = model_files["checkpoint"]
-    download_calib_path = os.path.join(cache, f"{name}.p")
-    have_all_files = os.path.exists(download_calib_path)
-
-    download_model_paths = []
-    for checkpoint in checkpoints:
-        cur_checkpoint_path = os.path.join(cache, f"{checkpoint}.ckpt")
-        have_all_files &= os.path.exists(cur_checkpoint_path)
-        download_model_paths.append(cur_checkpoint_path)
-
-    if not have_all_files:
-        print(f"Downloading models to {cache}")
-        download_and_extract(CHECKPOINT_URL, cache)
-
-    return download_model_paths, download_calib_path
-
-
-def download_and_extract(remote_model_url: str, local_model_dir) -> List[str]:
-    resp = urlopen(remote_model_url)
-    os.makedirs(local_model_dir, exist_ok=True)
-    with ZipFile(BytesIO(resp.read())) as zip_file:
-        all_files_and_dirs = zip_file.namelist()
-        zip_file.extractall(local_model_dir)
-    return all_files_and_dirs
 
 
 class Sybil:
@@ -209,8 +167,6 @@ class Sybil:
 
         if calibrator_path is not None:
             self.calibrator = pickle.load(open(calibrator_path, "rb"))
-        else:
-            self.calibrator = None
 
     def load_model(self, path):
         """Load model from path.
@@ -274,8 +230,7 @@ class Sybil:
         self,
         model: SybilNet,
         series: Union[Serie, List[Serie]],
-        return_attentions: bool = False,
-    ) -> Prediction:
+    ) -> np.ndarray:
         """Run predictions over the given serie(s).
 
         Parameters
@@ -284,8 +239,6 @@ class Sybil:
             Instance of SybilNet
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
-        return_attentions : bool
-            If True, returns attention scores for each serie. See README for details.
 
         Returns
         -------
@@ -299,7 +252,6 @@ class Sybil:
             raise ValueError("Expected either a Serie object or list of Serie objects.")
 
         scores: List[List[float]] = []
-        attentions: List[Dict[str, np.ndarray]] = [] if return_attentions else None
         for serie in series:
             if not isinstance(serie, Serie):
                 raise ValueError("Expected a list of Serie objects.")
@@ -311,32 +263,17 @@ class Sybil:
             with torch.no_grad():
                 out = model(volume)
                 score = out["logit"].sigmoid().squeeze(0).cpu().numpy()
-                scores.append(score.tolist())
-                if return_attentions:
-                    attentions.append(
-                        {
-                            "image_attention_1": out["image_attention_1"]
-                            .detach()
-                            .cpu(),
-                            "volume_attention_1": out["volume_attention_1"]
-                            .detach()
-                            .cpu(),
-                        }
-                    )
+                scores.append(score)
 
-        return Prediction(scores=scores, attentions=attentions)
+        return np.stack(scores)
 
-    def predict(
-        self, series: Union[Serie, List[Serie]], return_attentions: bool = False
-    ) -> Prediction:
+    def predict(self, series: Union[Serie, List[Serie]]) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
 
         Parameters
         ----------
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
-        return_attentions : bool
-            If True, returns attention scores for each serie. See README for details.
 
         Returns
         -------
@@ -345,48 +282,25 @@ class Sybil:
 
         """
         scores = []
-        attentions_ = [] if return_attentions else None
-        attention_keys = None
         for sybil in self.ensemble:
-            pred = self._predict(sybil, series, return_attentions)
-            scores.append(pred.scores)
-            if return_attentions:
-                attentions_.append(pred.attentions)
-                if attention_keys is None:
-                    attention_keys = pred.attentions[0].keys()
-
+            pred = self._predict(sybil, series)
+            scores.append(pred)
         scores = np.mean(np.array(scores), axis=0)
         calib_scores = self._calibrate(scores).tolist()
+        return Prediction(scores=calib_scores)
 
-        attentions = None
-        if return_attentions:
-            attentions = []
-            for i in range(len(series)):
-                att = {}
-                for key in attention_keys:
-                    att[key] = np.stack([
-                        attentions_[j][i][key] for j in range(len(self.ensemble))
-                    ])
-                attentions.append(att)
-
-        return Prediction(scores=calib_scores, attentions=attentions)
-
-    def evaluate(
-        self, series: Union[Serie, List[Serie]], return_attentions: bool = False
-    ) -> Evaluation:
+    def evaluate(self, series: Union[Serie, List[Serie]]) -> Evaluation:
         """Run evaluation over the given serie(s).
 
         Parameters
         ----------
         series : Union[Serie, List[Serie]]
             One or multiple series to run evaluation for.
-        return_attentions : bool
-            If True, returns attention scores for each serie. See README for details.
 
         Returns
         -------
         Evaluation
-            Output evaluation. See details for :class:`~sybil.model.Evaluation`.
+            Output evaluation. See details for :class:`~sybil.model.Evaluation`".
 
         """
         if isinstance(series, Serie):
@@ -401,8 +315,7 @@ class Sybil:
             raise ValueError("All series must have a label for evaluation")
 
         # Get scores and labels
-        predictions = self.predict(series, return_attentions)
-        scores = predictions.scores
+        scores = self.predict(series).scores
         labels = [serie.get_label(self._max_followup) for serie in series]
 
         # Convert to format for survival metrics
@@ -418,4 +331,4 @@ class Sybil:
         auc = [float(out[f"{i + 1}_year_auc"]) for i in range(self._max_followup)]
         c_index = float(out["c_index"])
 
-        return Evaluation(auc=auc, c_index=c_index, scores=scores, attentions=predictions.attentions)
+        return Evaluation(auc=auc, c_index=c_index, scores=scores)

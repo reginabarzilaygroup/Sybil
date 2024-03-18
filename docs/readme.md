@@ -9,7 +9,7 @@ python train.py \
     --gpus 8 \
     --precision 16 \
     --max_followup 6 \
-    --img_file_type png \
+    --img_file_type mha \
     --min_num_images 0 \
     --num_images 200 \
     --use_only_thin_cuts_for_ct \

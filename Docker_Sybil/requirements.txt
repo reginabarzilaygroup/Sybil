@@ -1,0 +1,28 @@
+# Requirements file for ReadTheDocs, check .readthedocs.yml.
+# To build the module reference correctly, make sure every external package
+# under `install_requires` in `setup.cfg` is also listed here!
+# sphinx_rtd_theme
+#recommonmark
+sphinx>=3.2.1
+# deep learning
+torch
+torchvision
+pytorch_lightning
+# math
+#sklearn==1.0.2
+scikit-learn==1.0.2
+#scikit-learn
+# utils
+tqdm
+lifelines
+# loading
+opencv-python
+albumentations
+pydicom
+# logging
+#comet-ml
+torchio
+# downloading snapshots
+gdown
+numpy
+pandas

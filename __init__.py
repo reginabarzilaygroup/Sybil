@@ -1,8 +1,6 @@
 # type: ignore
 
 import sys
-from sybil.model import Sybil
-from sybil.serie import Serie
 
 if sys.version_info[:2] >= (3, 8):
     # TODO: Import directly (no need for conditional) when `python_requires = >= 3.8`
@@ -19,8 +17,8 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-# from sybil.model import Sybil
-# from sybil.serie import Serie
+from sybil.model import Sybil
+from sybil.serie import Serie
 
 
 __all__ = ["Sybil", "Serie"]

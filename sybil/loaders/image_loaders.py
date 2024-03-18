@@ -4,26 +4,28 @@ import torch
 import pydicom
 from pydicom.pixel_data_handlers.util import apply_modality_lut
 import numpy as np
+import SimpleITK as sitk
 
 LOADING_ERROR = "LOADING ERROR! {}"
 
-
-class OpenCVLoader(abstract_loader):
+class SimpleITKLoader(abstract_loader):
 
     def load_input(self, path, sample):
         """
-        loads as grayscale image
+        Loads MHA file as grayscale image
         """
-        return {"input": cv2.imread(path, 0) }
+        image = sitk.ReadImage(path)
+        array = sitk.GetArrayFromImage(image)
+        return {"input": array}
 
     @property
     def cached_extension(self):
-        return ".png"
+        return ".mha"
 
 
 class DicomLoader(abstract_loader):
-    def __init__(self, cache_path, augmentations, args, apply_augmentations=True):
-        super(DicomLoader, self).__init__(cache_path, augmentations, args, apply_augmentations)
+    def __init__(self, cache_path, augmentations, args):
+        super(DicomLoader, self).__init__(cache_path, augmentations, args)
         self.window_center = -600
         self.window_width = 1500
 
@@ -40,7 +42,6 @@ class DicomLoader(abstract_loader):
     @property
     def cached_extension(self):
         return ""
-
 
 def apply_windowing(image, center, width, bit_size=16):
     """Windowing function to transform image pixels for presentation.

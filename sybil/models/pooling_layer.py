@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-
 class MultiAttentionPool(nn.Module):
     def __init__(self):
         super(MultiAttentionPool, self).__init__()
@@ -45,8 +44,7 @@ class MultiAttentionPool(nn.Module):
         output['hidden'] = self.hidden_fc(hidden)
 
         return output 
-
-
+    
 class GlobalMaxPool(nn.Module):
     '''
     Pool to obtain the maximum value for each channel
@@ -65,7 +63,6 @@ class GlobalMaxPool(nn.Module):
         x = x.view(spatially_flat_size)
         hidden, _ = torch.max(x, dim=-1)
         return {'hidden': hidden}
-
 
 class PerFrameMaxPool(nn.Module):
     '''
@@ -89,7 +86,6 @@ class PerFrameMaxPool(nn.Module):
         output['multi_image_hidden'], _ = torch.max(x, dim=-1)
         return output
 
-
 class Conv1d_AttnPool(nn.Module):
         '''
         Pool to learn an attention over the slices after convolution
@@ -112,7 +108,6 @@ class Conv1d_AttnPool(nn.Module):
             x = self.conv1d(x) # B, C, N'
             return self.aggregate(x)
 
-
 class Simple_AttentionPool(nn.Module):
     '''
     Pool to learn an attention over the slices
@@ -130,7 +125,7 @@ class Simple_AttentionPool(nn.Module):
             - x: tensor of shape (B, C, N)
         returns:
             - output: dict
-                + output['volume_attention']: tensor (B, N)
+                + output['attention_scores']: tensor (B, C)
                 + output['hidden']: tensor (B, C)
         '''
         output = {}
@@ -146,7 +141,6 @@ class Simple_AttentionPool(nn.Module):
         x = x * attention_scores #B, C, N
         output['hidden'] = torch.sum(x, dim=-1)
         return output
-
 
 class Simple_AttentionPool_MultiImg(nn.Module):
     '''
@@ -165,8 +159,8 @@ class Simple_AttentionPool_MultiImg(nn.Module):
             - x: tensor of shape (B, C, T, W, H)
         returns:
             - output: dict
-                + output['image_attention']: tensor (B, T, W*H)
-                + output['multi_image_hidden']: tensor (B, C, T)
+                + output['attention_scores']: tensor (B, T, C)
+                + output['multi_image_hidden']: tensor (B, T, C)
                 + output['hidden']: tensor (B, T*C)
         '''
         output = {} 

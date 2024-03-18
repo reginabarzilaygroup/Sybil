@@ -175,9 +175,9 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--img_file_type",
         type=str,
-        default="png",
-        choices=["png", "dicom"],
-        help="Type of image. one of [png, dicom]",
+        default="mha",
+        choices=["mha", "dicom"],
+        help="Type of image. one of [mha, dicom]",
     )
     parser.add_argument(
         "--fix_seed_for_multi_image_augmentations",

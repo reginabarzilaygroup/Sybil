@@ -5,10 +5,13 @@ import re
 from typing import Literal
 import torch
 from torch.utils import data
-
-from sybil.utils.sampler import DistributedWeightedSampler
+import sys
+sys.path.append('/mnt/netcache/bodyct/experiments/Sybil_Fennie/sybil')
+from sybil.utils2.sampler import DistributedWeightedSampler
 from sybil.augmentations import get_augmentations
-from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader
+from sybil.loaders.image_loaders import SimpleITKLoader, DicomLoader
+
+
 
 string_classes = (str, bytes)
 int_classes = int
@@ -181,7 +184,7 @@ def get_sample_loader(split_group: Literal["train", "dev", "test"], args: Namesp
     augmentations = get_augmentations(split_group, args)
     if args.img_file_type == "dicom":
         return DicomLoader(args.cache_path, augmentations, args)
-    elif args.img_file_type == "png":
-        return OpenCVLoader(args.cache_path, augmentations, args)
+    elif args.img_file_type == "mha":
+        return SimpleITKLoader(args.cache_path, augmentations, args)
     else:
         raise NotImplementedError

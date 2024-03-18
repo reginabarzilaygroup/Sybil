@@ -168,7 +168,7 @@ class Normalize_Tensor_2d(Abstract_augmentation):
         )
 
         self.permute = args.img_file_type in [
-            "png",
+            "mha",
         ]
 
     def __call__(self, input_dict, sample=None):
