@@ -145,7 +145,7 @@ class abstract_loader:
             self.composed_all_augmentations = ComposeAug(augmentations)
 
     @abstractmethod
-    def load_input(self, path, sample):
+    def load_input(self, path):
         pass
 
     @property
@@ -153,10 +153,10 @@ class abstract_loader:
     def cached_extension(self):
         pass
 
-    def configure_path(self, path, sample):
+    def configure_path(self, path, sample=None):
         return path
 
-    def get_image(self, path, sample):
+    def get_image(self, path, sample=None):
         """
         Returns a transformed image by its absolute path.
         If cache is used - transformed image will be loaded if available,
@@ -166,10 +166,10 @@ class abstract_loader:
         input_path = self.configure_path(path, sample)
 
         if input_path == self.pad_token:
-            return self.load_input(input_path, sample)
+            return self.load_input(input_path)
 
         if not self.use_cache:
-            input_dict = self.load_input(input_path, sample)
+            input_dict = self.load_input(input_path)
             # hidden loaders typically do not use augmentation
             if self.apply_augmentations:
                 input_dict = self.composed_all_augmentations(input_dict, sample)
@@ -177,7 +177,7 @@ class abstract_loader:
 
         if self.args.use_annotations:
             input_dict["mask"] = get_scaled_annotation_mask(
-                sample["annotations"], self.args
+                input_dict["annotations"], self.args
             )
 
         for key, post_augmentations in self.split_augmentations:
@@ -207,7 +207,7 @@ class abstract_loader:
                     warnings.warn(CORUPTED_FILE_ERR.format(sys.exc_info()[0]))
                     self.cache.rem(input_path, key)
         all_augmentations = self.split_augmentations[-1][1]
-        input_dict = self.load_input(input_path, sample)
+        input_dict = self.load_input(input_path)
         if self.apply_augmentations:
             input_dict = apply_augmentations_and_cache(
                 input_dict,

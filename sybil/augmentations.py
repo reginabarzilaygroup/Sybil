@@ -45,7 +45,7 @@ class Abstract_augmentation(object):
         )
 
     @abstractmethod
-    def __call__(self, img, mask=None, additional=None):
+    def __call__(self, input_dict):
         pass
 
     def set_seed(self, seed):
@@ -141,7 +141,7 @@ class Rotate_Range(Abstract_augmentation):
         self.transform = A.Rotate(limit=self.max_angle, p=0.5)
 
     def __call__(self, input_dict, sample=None):
-        if "seed" in sample:
+        if sample and "seed" in sample:
             self.set_seed(sample["seed"])
         out = self.transform(
             image=input_dict["input"], mask=input_dict.get("mask", None)

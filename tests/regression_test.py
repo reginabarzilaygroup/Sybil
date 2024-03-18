@@ -66,7 +66,8 @@ def main():
     num_files = len(dicom_files)
 
     # Load a trained model
-    model = Sybil("sybil_ensemble")
+    # model = Sybil("sybil_ensemble")
+    model = Sybil()
 
     myprint(f"Beginning prediction using {num_files} files from {image_data_dir}")
 

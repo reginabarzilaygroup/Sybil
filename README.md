@@ -1,8 +1,10 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pgmikhael/Sybil/blob/main/LICENSE.txt) ![version](https://img.shields.io/badge/version-1.0.2-success)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pgmikhael/Sybil/blob/main/LICENSE.txt) ![version](https://img.shields.io/badge/version-1.2.0-success)
 
 # Sybil
 
-Lung Cancer Risk Prediction
+Lung Cancer Risk Prediction.
+
+Additional documentation can be found on the [GitHub Wiki](https://github.com/reginabarzilaygroup/Sybil/wiki).
 
 ## Run a regression test
 
@@ -21,7 +23,7 @@ You can load our pretrained model trained on the NLST dataset, and score a given
 from sybil import Serie, Sybil
 
 # Load a trained model
-model = Sybil("sybil_base")
+model = Sybil("sybil_ensemble")
 
 # Get risk scores
 serie = Serie([dicom_path_1, dicom_path_2, ...])
@@ -32,9 +34,9 @@ serie = Serie([dicom_path_1, dicom_path_2, ...], label=1)
 results = model.evaluate([serie])
 ```
 
-Models available include: `sybil_base` and `sybil_ensemble`.
+Models available include: `sybil_1`, `sybil_2`, `sybil_3`, `sybil_4`, `sybil_5` and `sybil_ensemble`.
 
-All model files are available [here](https://drive.google.com/drive/folders/1nBp05VV9mf5CfEO6W5RY4ZpcpxmPDEeR?usp=sharing).
+All model files are available on [GitHub releases](https://github.com/reginabarzilaygroup/Sybil/releases) as well as [here](https://drive.google.com/drive/folders/1nBp05VV9mf5CfEO6W5RY4ZpcpxmPDEeR?usp=sharing).
 
 ## Replicating results
 

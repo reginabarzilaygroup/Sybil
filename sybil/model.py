@@ -161,7 +161,7 @@ def download_and_extract(remote_model_url: str, local_model_dir) -> List[str]:
 class Sybil:
     def __init__(
         self,
-        name_or_path: Union[List[str], str] = "sybil_base",
+        name_or_path: Union[List[str], str] = "sybil_ensemble",
         cache: str = "~/.sybil/",
         calibrator_path: Optional[str] = None,
         device: Optional[str] = None,
