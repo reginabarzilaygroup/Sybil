@@ -118,7 +118,7 @@ if myoverview:
 else:
     subfolders = get_subfolder_paths(ParentDirectory)
 
-headers = ["seriesuid name", "year1", "year2", "year3", "year4", "year5", "year6"]
+headers = ["SeriesInstanceUID", "year1", "year2", "year3", "year4", "year5", "year6"]
 
 for subfolder in subfolders:
     try:
