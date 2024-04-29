@@ -112,6 +112,7 @@ def inference(
     with open(prediction_path, "w") as f:
         json.dump(pred_dict, f, indent=2)
 
+    series_with_attention = None
     if return_attentions:
         attention_path = os.path.join(output_dir, "attention_scores.pkl")
         with open(attention_path, "wb") as f:
@@ -124,7 +125,7 @@ def inference(
             gain=3,
         )
 
-    return pred_dict
+    return pred_dict, series_with_attention
 
 
 def main():
@@ -133,7 +134,7 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    pred_dict = inference(
+    pred_dict, series_with_attention = inference(
         args.image_dir,
         args.output_dir,
         args.model_name,
