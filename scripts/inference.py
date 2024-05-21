@@ -5,6 +5,7 @@ import logging
 import os
 import pickle
 
+import sybil.utils.logging_utils
 from sybil import Serie, Sybil, visualize_attentions
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -52,19 +53,10 @@ def _get_parser():
         help="Name of the model to use for prediction. Default: sybil_ensemble",
     )
 
-    parser.add_argument("-l", "--log", "--loglevel", default="INFO", dest="loglevel")
+    parser.add_argument("-l", "--log", "--loglevel", "--log-level",
+                        default="INFO", dest="loglevel")
 
     return parser
-
-
-def logging_basic_config(args):
-    info_fmt = "[%(asctime)s] - %(message)s"
-    debug_fmt = "[%(asctime)s] [%(filename)s:%(lineno)d] %(levelname)s - %(message)s"
-    fmt = debug_fmt if args.loglevel.upper() == "DEBUG" else info_fmt
-
-    logging.basicConfig(
-        format=fmt, datefmt="%Y-%m-%d %H:%M:%S", level=args.loglevel.upper()
-    )
 
 
 def inference(
@@ -74,7 +66,7 @@ def inference(
     return_attentions=False,
     file_type="auto",
 ):
-    logger = logging.getLogger("inference")
+    logger = sybil.utils.logging_utils.get_logger()
 
     input_files = os.listdir(image_dir)
     input_files = [os.path.join(image_dir, x) for x in input_files if not x.startswith(".")]
@@ -94,10 +86,10 @@ def inference(
 
     num_files = len(input_files)
 
+    logger.debug(f"Beginning prediction using {num_files} {file_type} files from {image_dir}")
+
     # Load a trained model
     model = Sybil(model_name)
-
-    logger.debug(f"Beginning prediction using {num_files} {file_type} files from {image_dir}")
 
     # Get risk scores
     serie = Serie(input_files, file_type=file_type)
@@ -130,7 +122,7 @@ def inference(
 
 def main():
     args = _get_parser().parse_args()
-    logging_basic_config(args)
+    sybil.utils.logging_utils.configure_logger(args.loglevel)
 
     os.makedirs(args.output_dir, exist_ok=True)
 

@@ -12,6 +12,8 @@ import pickle
 
 from sybil.serie import Serie
 from sybil.models.sybil import SybilNet
+from sybil.utils.logging_utils import get_logger
+from sybil.utils.device_utils import get_default_device
 from sybil.utils.metrics import get_survival_metrics
 
 
@@ -182,6 +184,7 @@ class Sybil:
             By default uses GPU, if available.
 
         """
+        self._logger = get_logger()
         # Download if needed
         if isinstance(name_or_path, str) and (name_or_path in NAME_TO_FILE):
             name_or_path, calibrator_path = download_sybil(name_or_path, cache)
@@ -240,7 +243,7 @@ class Sybil:
 
         # Set eval
         model.eval()
-        print(f"Loaded model from {path}")
+        self._logger.info(f"Loaded model from {path}")
         return model
 
     def _calibrate(self, scores: np.ndarray) -> np.ndarray:

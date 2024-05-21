@@ -20,5 +20,6 @@ finally:
 from sybil.model import Sybil
 from sybil.serie import Serie
 from sybil.utils.visualization import visualize_attentions
+import sybil.utils.logging_utils
 
 __all__ = ["Sybil", "Serie", "visualize_attentions"]
