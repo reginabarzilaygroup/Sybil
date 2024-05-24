@@ -4,7 +4,6 @@ import os
 from typing import NamedTuple, Union, Dict, List, Optional, Tuple
 from urllib.request import urlopen
 from zipfile import ZipFile
-# import gdown
 
 import torch
 import numpy as np
@@ -81,49 +80,6 @@ class Evaluation(NamedTuple):
     c_index: float
     scores: List[List[float]]
     attentions: List[Dict[str, np.ndarray]] = None
-
-
-def download_sybil_gdrive(name, cache):
-    """Download trained models and calibrator from Google Drive
-
-    Parameters
-    ----------
-    name (str): name of model to use. A key in NAME_TO_FILE
-    cache (str): path to directory where files are downloaded
-
-    Returns
-    -------
-        download_model_paths (list): paths to .ckpt models
-        download_calib_path (str): path to calibrator
-    """
-    # Create cache folder if not exists
-    cache = os.path.expanduser(cache)
-    os.makedirs(cache, exist_ok=True)
-
-    # Download if neded
-    model_files = NAME_TO_FILE[name]
-
-    # Download models
-    download_model_paths = []
-    for model_name, google_id in zip(
-        model_files["checkpoint"], model_files["google_checkpoint_id"]
-    ):
-        model_path = os.path.join(cache, f"{model_name}.ckpt")
-        if not os.path.exists(model_path):
-            print(f"Downloading model to {cache}")
-            gdown.download(id=google_id, output=model_path, quiet=False)
-        download_model_paths.append(model_path)
-
-    # download calibrator
-    download_calib_path = os.path.join(cache, f"{name}.p")
-    if not os.path.exists(download_calib_path):
-        gdown.download(
-            id=model_files["google_calibrator_id"],
-            output=download_calib_path,
-            quiet=False,
-        )
-
-    return download_model_paths, download_calib_path
 
 
 def download_sybil(name, cache) -> Tuple[List[str], str]:
@@ -327,6 +283,9 @@ class Sybil:
                             .detach()
                             .cpu(),
                             "volume_attention_1": out["volume_attention_1"]
+                            .detach()
+                            .cpu(),
+                            "hidden": out["hidden"]
                             .detach()
                             .cpu(),
                         }

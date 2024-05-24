@@ -10,8 +10,6 @@ from sklearn.metrics import (
     average_precision_score,
 )
 import numpy as np
-from lifelines.utils.btree import _BTree
-from lifelines import KaplanMeierFitter
 import warnings
 
 EPSILON = 1e-6
@@ -154,6 +152,7 @@ def compute_auc_at_followup(probs, censor_times, golds, followup, fup_lower_boun
 
 
 def get_censoring_dist(train_dataset):
+    from lifelines import KaplanMeierFitter
     _dataset = train_dataset.dataset
     times, event_observed = (
         [d["time_at_event"] for d in _dataset],
@@ -309,6 +308,7 @@ def _concordance_summary_statistics(
     censored_truth = censored_truth[ix]
     censored_pred = predicted_event_times[~died_mask][ix]
 
+    from lifelines.utils.btree import _BTree
     censored_ix = 0
     died_ix = 0
     times_to_compare = {}

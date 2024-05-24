@@ -59,6 +59,8 @@ class Serie:
         """
         if label is not None and censor_time is None:
             raise ValueError("censor_time should also provided with label.")
+        if file_type == "png" and voxel_spacing is None:
+            raise ValueError("voxel_spacing should be provided for PNG files.")
 
         self._censor_time = censor_time
         self._label = label
@@ -263,13 +265,11 @@ class Serie:
             - serie doesn't have a label, OR
             - slice thickness is too big
         """
-        if (self._meta.thickness is None) or (
-            self._meta.thickness > args.slice_thickness_filter
-        ):
+        if self._meta.thickness is None:
+            raise ValueError("slice thickness not found")
+        if self._meta.thickness > args.slice_thickness_filter:
             raise ValueError(
-                "slice thickness is greater than {}.".format(
-                    args.slice_thickness_filter
-                )
+                f"slice thickness {self._meta.thickness} is greater than {args.slice_thickness_filter}."
             )
         if self._meta.voxel_spacing is None:
             raise ValueError("voxel spacing either not set or not found in DICOM")
