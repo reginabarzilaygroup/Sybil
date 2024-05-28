@@ -13,11 +13,11 @@ from typing import Literal
 
 import sybil.utils.logging_utils
 import sybil.datasets.utils
-from sybil import Serie, Sybil, visualize_attentions
+from sybil import Serie, Sybil, visualize_attentions, __version__
 
 
 def _get_parser():
-    description = __doc__ + f"\nVersion: {sybil.__version__}\n"
+    description = __doc__ + f"\nVersion: {__version__}\n"
     parser = argparse.ArgumentParser(description=description)
 
     parser.add_argument(
@@ -69,7 +69,7 @@ def _get_parser():
     parser.add_argument("-l", "--log", "--loglevel", "--log-level",
                         default="INFO", dest="loglevel")
 
-    parser.add_argument("-v", "--version", action="version", version=sybil.__version__)
+    parser.add_argument("-v", "--version", action="version", version=__version__)
 
     return parser
 
@@ -101,6 +101,7 @@ def predict(
         if extension.lower() in {".png", "png"}:
             file_type = "png"
             voxel_spacing = sybil.datasets.utils.VOXEL_SPACING
+            logger.debug(f"Using default voxel spacing: {voxel_spacing}")
     assert file_type in {"dicom", "png"}
     file_type = typing.cast(Literal["dicom", "png"], file_type)
 

@@ -13,7 +13,8 @@ if [ ! -d "$demo_scan_dir" ]; then
   unzip -q sybil_example.zip
 fi
 
-python3 scripts/inference.py \
+# Either python3 sybil/predict.py or sybil-predict (if installed via pip)
+python3 sybil/predict.py \
 --loglevel DEBUG \
 --output-dir demo_prediction \
 --return-attentions \
