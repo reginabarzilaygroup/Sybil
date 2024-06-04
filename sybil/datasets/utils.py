@@ -1,6 +1,5 @@
 import numpy as np
 import math
-from lifelines import KaplanMeierFitter
 
 # Error Messages
 METAFILE_NOTFOUND_ERR = "Metadata file {} could not be parsed! Exception: {}!"
@@ -104,16 +103,3 @@ def get_scaled_annotation_area(sample, args):
         areas.append(mask.sum() / (mask.shape[0] * mask.shape[1]))
     return np.array(areas)
 
-
-def get_censoring_dist(train_dataset):
-    _dataset = train_dataset.dataset
-    times, event_observed = (
-        [d["time_at_event"] for d in _dataset],
-        [d["y"] for d in _dataset],
-    )
-    all_observed_times = set(times)
-    kmf = KaplanMeierFitter()
-    kmf.fit(times, event_observed)
-
-    censoring_dist = {str(time): kmf.predict(time) for time in all_observed_times}
-    return censoring_dist
