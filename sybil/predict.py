@@ -69,6 +69,11 @@ def _get_parser():
     parser.add_argument("-l", "--log", "--loglevel", "--log-level",
                         default="INFO", dest="loglevel")
 
+    parser.add_argument('--threads', type=int, default=0,
+                        help="Number of threads to use for PyTorch inference. "
+                             "Default is 0 (use all available cores)."
+                             "Set to a negative number to use Pytorch default.")
+
     parser.add_argument("-v", "--version", action="version", version=__version__)
 
     return parser
@@ -81,6 +86,7 @@ def predict(
     return_attentions=False,
     write_attention_images=False,
     file_type: Literal["auto", "dicom", "png"] = "auto",
+    threads: int = 0,
 ):
     logger = sybil.utils.logging_utils.get_logger()
 
@@ -115,7 +121,7 @@ def predict(
     # Get risk scores
     serie = Serie(input_files, voxel_spacing=voxel_spacing, file_type=file_type)
     series = [serie]
-    prediction = model.predict(series, return_attentions=return_attentions)
+    prediction = model.predict(series, return_attentions=return_attentions, threads=threads)
     prediction_scores = prediction.scores[0]
 
     logger.debug(f"Prediction finished. Results:\n{prediction_scores}")
@@ -155,6 +161,7 @@ def main():
         args.return_attentions,
         args.write_attention_images,
         file_type=args.file_type,
+        threads=args.threads,
     )
 
     print(json.dumps(pred_dict, indent=2))
