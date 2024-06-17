@@ -120,7 +120,7 @@ if __name__ == '__main__':
             'slice_number': [slicenumber],
             'pixel_spacing': pixel_spacing,
             'slice_thickness': slice_thickness,
-            'img_position': img_posn,
+            'img_position': [img_posn],
             'series_data': make_metadata_dict(image_data, pid, timepoint, series_id, use_timepoint_and_studyinstance = True)
             }
                 
@@ -135,6 +135,7 @@ if __name__ == '__main__':
                     json_dataset[pt_idx]['accessions'][exam_idx]['image_series'][series_id]['paths'].append(path)
                     json_dataset[pt_idx]['accessions'][exam_idx]['image_series'][series_id]['slice_location'].append(slicelocation)
                     json_dataset[pt_idx]['accessions'][exam_idx]['image_series'][series_id]['slice_number'].append(slicenumber)
+                    json_dataset[pt_idx]['accessions'][exam_idx]['image_series'][series_id]['img_position'].append(img_posn)
             else:
                 exam_dict['image_series'] = {series_id: img_series_dict}
                 json_dataset[pt_idx]['accessions'].append(exam_dict)
