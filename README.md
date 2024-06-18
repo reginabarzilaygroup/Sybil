@@ -6,7 +6,7 @@ Lung Cancer Risk Prediction.
 
 Additional documentation can be found on the [GitHub Wiki](https://github.com/reginabarzilaygroup/Sybil/wiki).
 
-## Run a regression test
+# Run a regression test
 
 ```shell
 python tests/regression_test.py
@@ -15,7 +15,7 @@ python tests/regression_test.py
 This will download the`sybil_ensemble` model and sample data, and compare the results to what has previously been calculated.
 
 
-## Run the model
+# Run the model
 
 You can load our pretrained model trained on the NLST dataset, and score a given DICOM serie as follows:
 
@@ -38,7 +38,7 @@ Models available include: `sybil_1`, `sybil_2`, `sybil_3`, `sybil_4`, `sybil_5` 
 
 All model files are available on [GitHub releases](https://github.com/reginabarzilaygroup/Sybil/releases) as well as [here](https://drive.google.com/drive/folders/1nBp05VV9mf5CfEO6W5RY4ZpcpxmPDEeR?usp=sharing).
 
-## Replicating results
+# Replicating results
 
 You can replicate the results from our model using our training script:
 
@@ -49,14 +49,14 @@ python train.py
 See our [documentation](docs/readme.md) for a full description of Sybil's training parameters. Additional information on the training process can be found on the [train](https://github.com/reginabarzilaygroup/Sybil/tree/train) branch of this repository.
 
 
-## LDCT Orientation
+# LDCT Orientation
 
 The model expects the input to be an Axial LDCT, where the first frame is of the abdominal region and the last frame is along the clavicles.
 
 When the input is of the `dicom` type, the frames will be automatically sorted. However, for `png` inputs, the path of the PNG files must be in the right anatomical order. 
 
 
-## Annotations
+# Annotations
 
 To help train the model, two fellowship-trained thoracic radiologists jointly annotated suspicious lesions on NLST LDCTs using [MD.AI](https://md.ai) software for all participants who developed cancer within 1 year after an LDCT. Each lesion’s volume was marked with bounding boxes on contiguous thin-cut axial images. The “ground truth” annotations were informed by the imaging appearance and the clinical data provided by the NLST, i.e., the series and image number of cancerous nodules and the anatomical location of biopsy-confirmed lung cancers. For these participants, lesions in the location of subsequently diagnosed cancers were also annotated, even if the precursor lesion lacked imaging features specific for cancer. 
 
@@ -78,7 +78,7 @@ Annotations are availble to download in JSON format [here](https://drive.google.
 }
 ```
 
-## Attention Scores
+# Attention Scores
 
 The multi-attention pooling layer aims to learn the importance of each slice in the 3D volume and the importance of each pixel in the 2D slice. During training, these are supervised by bounding boxes of the cancerous nodules. This is a soft attention mechanism, and the model's primary task is to predict the risk of lung cancer. However, the attention scores can be extracted and used to visualize the model's focus on the 3D volume and the 2D slices. 
 
@@ -112,7 +112,13 @@ series_with_attention = visualize_attentions(
 
 ```
 
-## Cite
+# Training Data
+
+The Sybil model was trained using the National Lung Screening Trial (NLST) dataset:
+
+National Lung Screening Trial Research Team. (2013). Data from the National Lung Screening Trial (NLST) [Data set]. The Cancer Imaging Archive. https://doi.org/10.7937/TCIA.HMQ8-J677
+
+# Cite
 
 ```
 @article{mikhael2023sybil,

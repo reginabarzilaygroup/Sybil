@@ -13,8 +13,9 @@ if [ ! -d "$demo_scan_dir" ]; then
   unzip -q sybil_example.zip
 fi
 
-# Either python3 sybil/predict.py or sybil-predict (if installed via pip)
-python3 sybil/predict.py \
+# If not installed with pip, sybil-predict will not be available.
+# Can use "python3 sybil/predict.py" instead.
+sybil-predict \
 --loglevel DEBUG \
 --output-dir demo_prediction \
 --return-attentions \

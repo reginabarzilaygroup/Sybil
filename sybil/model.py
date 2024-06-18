@@ -116,6 +116,21 @@ def download_and_extract(remote_model_url: str, local_model_dir) -> List[str]:
     return all_files_and_dirs
 
 
+def _torch_set_num_threads(threads) -> int:
+    """
+    Set the number of CPU threads for torch to use.
+    Set to a negative number for no-op.
+    Set to 0 for the number of CPUs.
+    """
+    if threads < 0:
+        return torch.get_num_threads()
+    if threads is None or threads == 0:
+        threads = os.cpu_count()
+
+    torch.set_num_threads(threads)
+    return torch.get_num_threads()
+
+
 class Sybil:
     def __init__(
         self,
@@ -294,7 +309,7 @@ class Sybil:
         return Prediction(scores=scores, attentions=attentions)
 
     def predict(
-        self, series: Union[Serie, List[Serie]], return_attentions: bool = False
+        self, series: Union[Serie, List[Serie]], return_attentions: bool = False, threads=0,
     ) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
 
@@ -304,6 +319,8 @@ class Sybil:
             One or multiple series to run predictions for.
         return_attentions : bool
             If True, returns attention scores for each serie. See README for details.
+        threads : int
+            Number of CPU threads to use for PyTorch inference. Default is 0 (use all available cores).
 
         Returns
         -------
@@ -311,6 +328,10 @@ class Sybil:
             Output prediction. See details for :class:`~sybil.model.Prediction`".
 
         """
+
+        # Set CPU threads available to torch
+        num_threads = _torch_set_num_threads(threads)
+        self._logger.debug(f"Using {num_threads} threads for PyTorch inference")
 
         if self._device_flexible:
             self.device = self._pick_device()
