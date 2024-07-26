@@ -227,8 +227,6 @@ class Sybil:
 
         Parameters
         ----------
-        calibrator: Optional[dict]
-            Dictionary of sklearn.calibration.CalibratedClassifierCV for each year, otherwise None.
         scores: np.ndarray
             risk scores as numpy array
 
