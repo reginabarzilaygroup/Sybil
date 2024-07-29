@@ -138,7 +138,7 @@ class Serie:
         images = [i["input"] for i in input_dicts]
         return images
 
-    @functools.cache
+    @functools.lru_cache
     def get_volume(self) -> torch.Tensor:
         """
         Load loaded 3D CT volume
