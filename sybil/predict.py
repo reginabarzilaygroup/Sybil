@@ -49,7 +49,6 @@ def _get_parser():
         help="Generate images with attention overlap. Sets --return-attentions (if not already set).",
     )
 
-
     parser.add_argument(
         "--file-type",
         default="auto",
@@ -89,6 +88,8 @@ def predict(
     threads: int = 0,
 ):
     logger = sybil.utils.logging_utils.get_logger()
+
+    return_attentions |= write_attention_images
 
     input_files = os.listdir(image_dir)
     input_files = [os.path.join(image_dir, x) for x in input_files if not x.startswith(".")]
