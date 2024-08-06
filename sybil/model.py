@@ -7,10 +7,10 @@ from zipfile import ZipFile
 
 import torch
 import numpy as np
-import pickle
 
 from sybil.serie import Serie
 from sybil.models.sybil import SybilNet
+from sybil.models.calibrator import SimpleClassifierGroup
 from sybil.utils.logging_utils import get_logger
 from sybil.utils.device_utils import get_default_device, get_most_free_gpu, get_device_mem_info
 from sybil.utils.metrics import get_survival_metrics
@@ -67,7 +67,7 @@ NAME_TO_FILE = {
     },
 }
 
-CHECKPOINT_URL = "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.0.3/sybil_checkpoints.zip"
+CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://www.dropbox.com/scl/fi/45rtadfdci0bj8dbpotmr/sybil_checkpoints_v1.5.0.zip?rlkey=n8n7pvhb89pjoxgvm90mtbtuk&dl=1")
 
 
 class Prediction(NamedTuple):
@@ -91,7 +91,7 @@ def download_sybil(name, cache) -> Tuple[List[str], str]:
     # Download models
     model_files = NAME_TO_FILE[name]
     checkpoints = model_files["checkpoint"]
-    download_calib_path = os.path.join(cache, f"{name}.p")
+    download_calib_path = os.path.join(cache, f"{name}_simple_calibrator.json")
     have_all_files = os.path.exists(download_calib_path)
 
     download_model_paths = []
@@ -187,7 +187,7 @@ class Sybil:
         self.to(self.device)
 
         if calibrator_path is not None:
-            self.calibrator = pickle.load(open(calibrator_path, "rb"))
+            self.calibrator = SimpleClassifierGroup.from_json_grouped(calibrator_path)
         else:
             self.calibrator = None
 
@@ -227,8 +227,6 @@ class Sybil:
 
         Parameters
         ----------
-        calibrator: Optional[dict]
-            Dictionary of sklearn.calibration.CalibratedClassifierCV for each year, otherwise None.
         scores: np.ndarray
             risk scores as numpy array
 
@@ -242,9 +240,7 @@ class Sybil:
         calibrated_scores = []
         for YEAR in range(scores.shape[1]):
             probs = scores[:, YEAR].reshape(-1, 1)
-            probs = self.calibrator["Year{}".format(YEAR + 1)].predict_proba(probs)[
-                :, 1
-            ]
+            probs = self.calibrator["Year{}".format(YEAR + 1)].predict_proba(probs)[:, -1]
             calibrated_scores.append(probs)
 
         return np.stack(calibrated_scores, axis=1)

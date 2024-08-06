@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torchvision
 from sybil.models.cumulative_probability_layer import Cumulative_Probability_Layer
@@ -29,6 +30,7 @@ class SybilNet(nn.Module):
         pool_output = self.aggregate_and_classify(x)
         output["activ"] = x
         output.update(pool_output)
+        output["prob"] = pool_output["logit"].sigmoid()
 
         return output
 
@@ -40,6 +42,17 @@ class SybilNet(nn.Module):
         pool_output["logit"] = self.prob_of_failure_layer(pool_output["hidden"])
 
         return pool_output
+
+    @staticmethod
+    def load(path):
+        checkpoint = torch.load(path, map_location="cpu")
+        args = checkpoint["args"]
+        model = SybilNet(args)
+
+        # Remove 'model' from param names
+        state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
+        model.load_state_dict(state_dict)  # type: ignore
+        return model
 
 
 class RiskFactorPredictor(SybilNet):

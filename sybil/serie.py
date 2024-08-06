@@ -1,3 +1,4 @@
+import functools
 from typing import List, Optional, NamedTuple, Literal
 from argparse import Namespace
 
@@ -137,6 +138,7 @@ class Serie:
         images = [i["input"] for i in input_dicts]
         return images
 
+    @functools.lru_cache
     def get_volume(self) -> torch.Tensor:
         """
         Load loaded 3D CT volume
