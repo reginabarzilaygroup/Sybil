@@ -13,7 +13,6 @@ from sybil.models.sybil import SybilNet
 from sybil.models.calibrator import SimpleClassifierGroup
 from sybil.utils.logging_utils import get_logger
 from sybil.utils.device_utils import get_default_device, get_most_free_gpu, get_device_mem_info
-from sybil.utils.metrics import get_survival_metrics
 
 
 # Leaving this here for a bit; these are IDs to download the models from Google Drive
@@ -379,6 +378,7 @@ class Sybil:
             Output evaluation. See details for :class:`~sybil.model.Evaluation`.
 
         """
+        from sybil.utils.metrics import get_survival_metrics
         if isinstance(series, Serie):
             series = [series]
         elif not isinstance(series, list):
