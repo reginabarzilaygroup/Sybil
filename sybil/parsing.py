@@ -95,9 +95,37 @@ def parse_dispatcher_config(config):
 
 def parse_args(args_strings=None):
     parser = argparse.ArgumentParser(
-        description="Sandstone research repo. Support Mammograms, CT Scans, Thermal Imaging, Cell Imaging and Chemistry."
+        description="Sybil research repo."
     )
-    # setup
+
+    add_parser_arguments(parser)
+
+    # run
+    parser = Trainer.add_argparse_args(parser)
+    if args_strings is None:
+        args = parser.parse_args()
+    else:
+        args = parser.parse_args(args_strings)
+    args.lr = args.init_lr
+
+    if (isinstance(args.gpus, str) and len(args.gpus.split(",")) > 1) or (
+            isinstance(args.gpus, int) and args.gpus > 1
+    ):
+        args.accelerator = "ddp"
+        args.replace_sampler_ddp = False
+    else:
+        args.accelerator = None
+        args.replace_sampler_ddp = False
+
+    args.unix_username = pwd.getpwuid(os.getuid())[0]
+
+    # learning initial state
+    args.step_indx = 1
+
+    return args
+
+
+def add_parser_arguments(parser):
     parser.add_argument(
         "--train",
         action="store_true",
@@ -264,7 +292,7 @@ def parse_args(args_strings=None):
     parser.add_argument(
         "--slice_thickness_filter",
         type=float,
-        help="Slice thickness using, if restricting to specific thickness value.",
+        help="Required slice thickness, if restricting to a specific value.",
     )
     parser.add_argument(
         "--use_only_thin_cuts_for_ct",
@@ -451,26 +479,4 @@ def parse_args(args_strings=None):
         help="Cache full image locally as well as cachable transforms",
     )
 
-    # run
-    parser = Trainer.add_argparse_args(parser)
-    if args_strings is None:
-        args = parser.parse_args()
-    else:
-        args = parser.parse_args(args_strings)
-    args.lr = args.init_lr
-
-    if (isinstance(args.gpus, str) and len(args.gpus.split(",")) > 1) or (
-        isinstance(args.gpus, int) and args.gpus > 1
-    ):
-        args.accelerator = "ddp"
-        args.replace_sampler_ddp = False
-    else:
-        args.accelerator = None
-        args.replace_sampler_ddp = False
-
-    args.unix_username = pwd.getpwuid(os.getuid())[0]
-
-    # learning initial state
-    args.step_indx = 1
-
-    return args
+    return parser

@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from sybil.serie import Serie
 from typing import Dict, List, Union
 import os
-import imageio
 
 
 def visualize_attentions(
@@ -83,6 +82,7 @@ def save_images(img_list: List[np.ndarray], directory: str, name: str):
     Returns:
         None
     """
+    import imageio
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, f"{name}.gif")
     imageio.mimsave(path, img_list)

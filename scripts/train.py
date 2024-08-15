@@ -7,14 +7,13 @@ import sys
 import pytorch_lightning as pl
 import torch
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from sybil.utils.helpers import get_dataset
 import sybil.utils.losses as losses
 import sybil.utils.metrics as metrics
 import sybil.utils.loading as loaders
 import sybil.models.sybil as model
 from sybil.parsing import parse_args
-
 
 
 class SybilLightning(pl.LightningModule):
@@ -349,9 +348,9 @@ def train(args):
     trainer = pl.Trainer.from_argparse_args(args)
     # Remove callbacks from args for safe pickling later
     args.callbacks = None
-    args.num_nodes = trainer.num_nodes
-    args.num_processes = trainer.num_processes
-    args.world_size = args.num_nodes * args.num_processes
+    # args.num_nodes = trainer.num_nodes
+    # args.num_processes = trainer.num_processes
+    # args.world_size = args.num_nodes * args.num_processes
     args.global_rank = trainer.global_rank
     args.local_rank = trainer.local_rank
 
@@ -377,6 +376,7 @@ def train(args):
     args.model_path = trainer.checkpoint_callback.best_model_path
     print("Saving args to {}".format(args.results_path))
     pickle.dump(vars(args), open(args.results_path, "wb"))
+
 
 def test(args):
     trainer = pl.Trainer.from_argparse_args(args)
@@ -409,9 +409,14 @@ def test(args):
     print("Saving args to {}".format(args.results_path))
     pickle.dump(vars(args), open(args.results_path, "wb"))
 
-if __name__ == "__main__":
+
+def main():
     args = parse_args()
     if args.train:
         train(args)
     elif args.test:
         test(args)
+
+
+if __name__ == "__main__":
+    main()

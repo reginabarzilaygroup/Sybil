@@ -1,3 +1,4 @@
+import math
 import os
 from posixpath import split
 import traceback, warnings
@@ -61,6 +62,11 @@ EDUCAT_LEVEL = {
 }
 
 
+def _get_slice_pos(path):
+    dcm = pydicom.dcmread(path, stop_before_pixels=True)
+    return float(dcm.ImagePositionPatient[-1])
+
+
 class NLST_Survival_Dataset(data.Dataset):
     def __init__(self, args, split_group):
         """
@@ -91,7 +97,9 @@ class NLST_Survival_Dataset(data.Dataset):
             target_shape=tuple(args.img_size + [args.num_images]), padding_mode=0
         )
 
-        if args.use_annotations:
+        self.use_annotations = args.use_annotations
+        self.annotations_metadata = None
+        if self.use_annotations:
             assert (
                 self.args.region_annotations_filepath
             ), "ANNOTATIONS METADATA FILE NOT SPECIFIED"
@@ -116,6 +124,9 @@ class NLST_Survival_Dataset(data.Dataset):
         print("Class counts are: {}".format(label_counts))
         print("Label weights are {}".format(label_weights))
         self.weights = [label_weights[d[dist_key]] for d in self.dataset]
+
+        self.corrupted_paths = set()
+        self.corrupted_series = set()
 
     def create_dataset(self, split_group):
         """
@@ -191,12 +202,16 @@ class NLST_Survival_Dataset(data.Dataset):
         return dataset
 
     def get_thinnest_cut(self, exam_dict):
-        # volume that is not thin cut might be the one annotated; or there are multiple volumes with same num slices, so:
-        # use annotated if available, otherwise use thinnest cut
-        possibly_annotated_series = [
-            s in self.annotations_metadata
-            for s in list(exam_dict["image_series"].keys())
-        ]
+        # volume that is not thin cut might be the one annotated; or there are multiple volumes with same num slices,
+        # so use annotated if available, otherwise use thinnest cut
+        possibly_annotated_series = []
+
+        if self.use_annotations:
+            possibly_annotated_series = [
+                s in self.annotations_metadata
+                for s in list(exam_dict["image_series"].keys())
+            ]
+
         series_lengths = [
             len(exam_dict["image_series"][series_id]["paths"])
             for series_id in exam_dict["image_series"].keys()
@@ -223,7 +238,7 @@ class NLST_Survival_Dataset(data.Dataset):
         # check if restricting to specific slice thicknesses
         slice_thickness = series_data["reconthickness"][0]
         wrong_thickness = (self.args.slice_thickness_filter is not None) and (
-            slice_thickness not in self.args.slice_thickness_filter
+            not math.isclose(slice_thickness, self.args.slice_thickness_filter)
         )
 
         # check if valid label (info is not missing)
@@ -254,7 +269,7 @@ class NLST_Survival_Dataset(data.Dataset):
         self, series_id, series_dict, exam_dict, pt_metadata, pid, split
     ):
         img_paths = series_dict["paths"]
-        slice_locations = series_dict["img_position"]
+        slice_locations = series_dict.get("img_position", None)
         series_data = series_dict["series_data"]
         device = series_data["manufacturer"][0]
         screen_timepoint = series_data["study_yr"][0]
@@ -372,23 +387,28 @@ class NLST_Survival_Dataset(data.Dataset):
         return np.array([int(right), int(left), int(other)])
 
     def order_slices(self, img_paths, slice_locations):
+        if not os.path.isabs(img_paths[0]):
+            img_paths = [
+                self.args.img_dir
+                + path[path.find("nlst-ct-png") + len("nlst-ct-png"):]
+                for path in img_paths
+            ]
+        if self.args.img_file_type == "dicom":  # ! NOTE: removing file extension affects get_ct_annotations mapping path to annotation
+            img_paths = [
+                path.replace("nlst-ct-png", "nlst-ct").replace(".png", "")
+                for path in img_paths
+            ]
+
+        if slice_locations is None and self.args.img_file_type == "dicom":
+            slice_locations = [_get_slice_pos(img_path) for img_path in img_paths]
+
+        if slice_locations is None:
+            raise ValueError("Slice locations not available for non-dicom images")
+
+        # If slice locations not available, img_paths must be dicom
         sorted_ids = np.argsort(slice_locations)
         sorted_img_paths = np.array(img_paths)[sorted_ids].tolist()
         sorted_slice_locs = np.sort(slice_locations).tolist()
-
-        if not sorted_img_paths[0].startswith(self.args.img_dir):
-            sorted_img_paths = [
-                self.args.img_dir
-                + path[path.find("nlst-ct-png") + len("nlst-ct-png") :]
-                for path in sorted_img_paths
-            ]
-        if (
-            self.args.img_file_type == "dicom"
-        ):  # ! NOTE: removing file extension affects get_ct_annotations mapping path to annotation
-            sorted_img_paths = [
-                path.replace("nlst-ct-png", "nlst-ct").replace(".png", "")
-                for path in sorted_img_paths
-            ]
 
         return sorted_img_paths, sorted_slice_locs
 
@@ -492,7 +512,10 @@ class NLST_Survival_Dataset(data.Dataset):
 
     @property
     def CORRUPTED_PATHS(self):
-        return pickle.load(open(CORRUPTED_PATHS, "rb"))
+        if os.path.exists(CORRUPTED_PATHS):
+            return pickle.load(open(CORRUPTED_PATHS, "rb"))
+        else:
+            return {"paths": [], "series": []}
 
     def get_summary_statement(self, dataset, split_group):
         summary = "Contructed NLST CT Cancer Risk {} dataset with {} records, {} exams, {} patients, and the following class balance \n {}"
