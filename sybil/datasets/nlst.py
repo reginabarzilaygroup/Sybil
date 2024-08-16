@@ -634,26 +634,32 @@ class NLST_Survival_Dataset(data.Dataset):
             masks = [i["mask"] for i in input_dicts]
             mask_arr = self.reshape_images(masks) if self.args.use_annotations else None
 
-        # resample pixel spacing
-        resample_now = self.args.resample_pixel_spacing_prob > np.random.uniform()
-        if self.always_resample_pixel_spacing or resample_now:
-            spacing = torch.tensor(sample["pixel_spacing"] + [1])
-            input_arr = tio.ScalarImage(
-                affine=torch.diag(spacing),
-                tensor=input_arr.permute(0, 2, 3, 1),
-            )
+        # Whether we want to resample pixel spacing to different voxel spacing
+        resample_now = self.always_resample_pixel_spacing
+        resample_now |= self.args.resample_pixel_spacing_prob > np.random.uniform()
+
+        spacing = torch.tensor(sample["pixel_spacing"] + [1])
+        input_arr = tio.ScalarImage(
+            affine=torch.diag(spacing),
+            tensor=input_arr.permute(0, 2, 3, 1),
+        )
+        if resample_now:
             input_arr = self.resample_transform(input_arr)
-            input_arr = self.padding_transform(input_arr.data)
+        # Always pad to consistent size
+        input_arr = self.padding_transform(input_arr.data)
 
-            if self.args.use_annotations:
-                mask_arr = tio.ScalarImage(
-                    affine=torch.diag(spacing),
-                    tensor=mask_arr.permute(0, 2, 3, 1),
-                )
+        if self.args.use_annotations:
+            mask_arr = tio.ScalarImage(
+                affine=torch.diag(spacing),
+                tensor=mask_arr.permute(0, 2, 3, 1),
+            )
+            if resample_now:
                 mask_arr = self.resample_transform(mask_arr)
-                mask_arr = self.padding_transform(mask_arr.data)
+            mask_arr = self.padding_transform(mask_arr.data)
 
-        out_dict["input"] = input_arr.data.permute(0, 3, 1, 2)
+        input_arr = input_arr.data.permute(0, 3, 1, 2)
+        out_dict["input"] = input_arr
+        print(f"input arr shape: {input_arr.shape}")
         if self.args.use_annotations:
             out_dict["mask"] = mask_arr.data.permute(0, 3, 1, 2)
 

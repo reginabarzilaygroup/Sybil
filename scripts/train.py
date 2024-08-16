@@ -228,7 +228,7 @@ class SybilLightning(pl.LightningModule):
         sync_dist=False,
     ):
         dict_of_tensors = {
-            k: v.float() for k, v in output.items() if isinstance(v, torch.Tensor)
+            k: v.float().mean() for k, v in output.items() if isinstance(v, torch.Tensor)
         }
         self.log_dict(
             dict_of_tensors,

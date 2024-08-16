@@ -111,7 +111,7 @@ def parse_args(args_strings=None):
     if (isinstance(args.gpus, str) and len(args.gpus.split(",")) > 1) or (
             isinstance(args.gpus, int) and args.gpus > 1
     ):
-        args.accelerator = "ddp"
+        args.accelerator = "cuda"
         args.replace_sampler_ddp = False
     else:
         args.accelerator = None
@@ -350,7 +350,7 @@ def add_parser_arguments(parser):
         "--batch_size",
         type=int,
         default=32,
-        help="Batch size for training [default: 128]",
+        help="Batch size for training [default: %(default)s]",
     )
     parser.add_argument(
         "--init_lr",
