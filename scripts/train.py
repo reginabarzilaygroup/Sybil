@@ -15,6 +15,8 @@ import sybil.utils.loading as loaders
 import sybil.models.sybil as model
 from sybil.parsing import parse_args
 
+import sybil.utils.logging_utils as logging_utils
+
 
 class SybilLightning(pl.LightningModule):
     """
@@ -346,11 +348,6 @@ def train(args):
         )
         args.callbacks = [checkpoint_callback]
     trainer = pl.Trainer.from_argparse_args(args)
-    # Remove callbacks from args for safe pickling later
-    args.callbacks = None
-    # args.num_nodes = trainer.num_nodes
-    # args.num_processes = trainer.num_processes
-    # args.world_size = args.num_nodes * args.num_processes
     args.global_rank = trainer.global_rank
     args.local_rank = trainer.local_rank
 
@@ -369,7 +366,7 @@ def train(args):
         print("{} -- {}".format(key.upper(), value))
 
     if args.snapshot is not None:
-        module = module.load_from_checkpoint(checkpoint_path= args.snapshot, strict=False)
+        module = module.load_from_checkpoint(checkpoint_path=args.snapshot, strict=False)
         module.args = args
     
     trainer.fit(module, train_dataset, dev_dataset)
@@ -412,6 +409,8 @@ def test(args):
 
 def main():
     args = parse_args()
+    logging_utils.configure_logger(args.loglevel)
+
     if args.train:
         train(args)
     elif args.test:

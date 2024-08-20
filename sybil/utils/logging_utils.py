@@ -17,7 +17,7 @@ def _get_formatter(loglevel="INFO"):
 
 
 def remove_all_handlers(logger):
-    while logger.hasHandlers():
+    while logger.hasHandlers() and len(logger.handlers) >= 1:
         logger.removeHandler(logger.handlers[0])
 
 
@@ -60,8 +60,8 @@ def get_logger(base_name=LOGGER_NAME):
     Return a logger.
     Use a different logger in each subprocess, though they should all have the same log level.
     """
-    pid = os.getpid()
-    logger_name = f"{base_name}-process-{pid}"
+    # pid = os.getpid()
+    logger_name = f"{base_name}"
     logger = logging.getLogger(logger_name)
     if not logger.hasHandlers():
         configure_logger(logger_name=logger_name)

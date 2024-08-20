@@ -659,7 +659,6 @@ class NLST_Survival_Dataset(data.Dataset):
 
         input_arr = input_arr.data.permute(0, 3, 1, 2)
         out_dict["input"] = input_arr
-        print(f"input arr shape: {input_arr.shape}")
         if self.args.use_annotations:
             out_dict["mask"] = mask_arr.data.permute(0, 3, 1, 2)
 

@@ -108,6 +108,7 @@ def parse_args(args_strings=None):
         args = parser.parse_args(args_strings)
     args.lr = args.init_lr
 
+    """
     if (isinstance(args.gpus, str) and len(args.gpus.split(",")) > 1) or (
             isinstance(args.gpus, int) and args.gpus > 1
     ):
@@ -116,6 +117,7 @@ def parse_args(args_strings=None):
     else:
         args.accelerator = None
         args.replace_sampler_ddp = False
+    """
 
     args.unix_username = pwd.getpwuid(os.getuid())[0]
 
@@ -478,5 +480,8 @@ def add_parser_arguments(parser):
         default=False,
         help="Cache full image locally as well as cachable transforms",
     )
+
+    parser.add_argument("-l", "--log", "--loglevel", "--log-level",
+                        default="INFO", dest="loglevel")
 
     return parser
