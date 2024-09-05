@@ -56,9 +56,9 @@ def visualize_attentions(
             overlayed[..., 2] = images[i]
             overlayed[..., 1] = images[i]
             overlayed[..., 0] = np.clip(
-                (attention_up[0, 0, i] * gain * 256) + images[i],
+                (attention_up[0, 0, i, ...] * gain * 256) + images[i],
                 a_min=0,
-                a_max=256,
+                a_max=255,
             )
 
             overlayed_images.append(np.uint8(overlayed))
