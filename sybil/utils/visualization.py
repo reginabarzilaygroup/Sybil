@@ -6,6 +6,29 @@ from typing import Dict, List, Union
 import os
 import imageio
 
+def collate_attention_scores(attention_dict: Dict[str, np.ndarray], N: int, eps=1e-6) -> torch.Tensor:
+    a1 = attention_dict["image_attention_1"]
+    v1 = attention_dict["volume_attention_1"]
+
+    a1 = torch.Tensor(a1)
+    v1 = torch.Tensor(v1)
+
+    # take mean attention over ensemble
+    a1 = torch.exp(a1).mean(0)
+    v1 = torch.exp(v1).mean(0)
+
+    attention = a1 * v1.unsqueeze(-1)
+    attention = attention.view(1, 25, 16, 16)
+
+    attention_up = F.interpolate(
+        attention.unsqueeze(0), (N, 512, 512), mode="trilinear"
+    )
+    attention_up = attention_up.cpu().numpy()
+    if eps:
+        attention_up[attention_up <= eps] = 0.0
+
+    return attention_up
+
 
 def visualize_attentions(
     series: Union[Serie, List[Serie]],
@@ -29,26 +52,9 @@ def visualize_attentions(
 
     series_overlays = []
     for serie_idx, serie in enumerate(series):
-        a1 = attentions[serie_idx]["image_attention_1"]
-        v1 = attentions[serie_idx]["volume_attention_1"]
-
-        a1 = torch.Tensor(a1)
-        v1 = torch.Tensor(v1)
-
-        # take mean attention over ensemble
-        a1 = torch.exp(a1).mean(0)
-        v1 = torch.exp(v1).mean(0)
-
-        attention = a1 * v1.unsqueeze(-1)
-        attention = attention.view(1, 25, 16, 16)
-
-        # get original image
         images = serie.get_raw_images()
-
         N = len(images)
-        attention_up = F.interpolate(
-            attention.unsqueeze(0), (N, 512, 512), mode="trilinear"
-        )
+        attention_up = collate_attention_scores(attentions[serie_idx], N)
 
         overlayed_images = []
         for i in range(N):
