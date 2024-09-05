@@ -67,7 +67,7 @@ NAME_TO_FILE = {
     },
 }
 
-CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://www.dropbox.com/scl/fi/45rtadfdci0bj8dbpotmr/sybil_checkpoints_v1.5.0.zip?rlkey=n8n7pvhb89pjoxgvm90mtbtuk&dl=1")
+CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip")
 
 
 class Prediction(NamedTuple):
@@ -108,8 +108,8 @@ def download_sybil(name, cache) -> Tuple[List[str], str]:
 
 
 def download_and_extract(remote_model_url: str, local_model_dir) -> List[str]:
-    resp = urlopen(remote_model_url)
     os.makedirs(local_model_dir, exist_ok=True)
+    resp = urlopen(remote_model_url)
     with ZipFile(BytesIO(resp.read())) as zip_file:
         all_files_and_dirs = zip_file.namelist()
         zip_file.extractall(local_model_dir)
