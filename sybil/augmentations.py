@@ -1,11 +1,17 @@
+import cv2
 import torch
 import torchvision
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
+
 from typing import Literal
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import random
+
+try:
+    import albumentations as A
+except ImportError:
+    # albumentations is not installed, training with augmentations will not be possible
+    A = None
 
 
 def get_augmentations(split: Literal["train", "dev", "test"], args):
@@ -94,7 +100,6 @@ class ToTensor(Abstract_augmentation):
 
     def __init__(self):
         super(ToTensor, self).__init__()
-        self.transform = ToTensorV2()
         self.name = "totensor"
 
     def __call__(self, input_dict, sample=None):
@@ -102,6 +107,20 @@ class ToTensor(Abstract_augmentation):
         if input_dict.get("mask", None) is not None:
             input_dict["mask"] = torch.from_numpy(input_dict["mask"]).float()
         return input_dict
+
+
+class ResizeTransform:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+    def __call__(self, image=None, mask=None):
+        out = {"image": None, "mask": None}
+        if image is not None:
+            out["image"] = cv2.resize(image, dsize=(self.width, self.height), interpolation=cv2.INTER_LINEAR)
+        if mask is not None:
+            out["mask"] = cv2.resize(mask, dsize=(self.width, self.height), interpolation=cv2.INTER_NEAREST)
+        return out
 
 
 class Scale_2d(Abstract_augmentation):
@@ -115,7 +134,7 @@ class Scale_2d(Abstract_augmentation):
         assert len(kwargs.keys()) == 0
         width, height = args.img_size
         self.set_cachable(width, height)
-        self.transform = A.Resize(height, width)
+        self.transform = ResizeTransform(width, height)
 
     def __call__(self, input_dict, sample=None):
         out = self.transform(
@@ -138,6 +157,7 @@ class Rotate_Range(Abstract_augmentation):
         super(Rotate_Range, self).__init__()
         assert len(kwargs.keys()) == 1
         self.max_angle = int(kwargs["deg"])
+        assert A is not None, "albumentations is not installed"
         self.transform = A.Rotate(limit=self.max_angle, p=0.5)
 
     def __call__(self, input_dict, sample=None):

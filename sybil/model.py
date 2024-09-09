@@ -13,7 +13,6 @@ from sybil.models.sybil import SybilNet
 from sybil.models.calibrator import SimpleClassifierGroup
 from sybil.utils.logging_utils import get_logger
 from sybil.utils.device_utils import get_default_device, get_most_free_gpu, get_device_mem_info
-from sybil.utils.metrics import get_survival_metrics
 
 
 # Leaving this here for a bit; these are IDs to download the models from Google Drive
@@ -67,7 +66,7 @@ NAME_TO_FILE = {
     },
 }
 
-CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://www.dropbox.com/scl/fi/45rtadfdci0bj8dbpotmr/sybil_checkpoints_v1.5.0.zip?rlkey=n8n7pvhb89pjoxgvm90mtbtuk&dl=1")
+CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip")
 
 
 class Prediction(NamedTuple):
@@ -107,12 +106,12 @@ def download_sybil(name, cache) -> Tuple[List[str], str]:
     return download_model_paths, download_calib_path
 
 
-def download_and_extract(remote_model_url: str, local_model_dir) -> List[str]:
-    resp = urlopen(remote_model_url)
-    os.makedirs(local_model_dir, exist_ok=True)
+def download_and_extract(remote_url: str, local_dir: str) -> List[str]:
+    os.makedirs(local_dir, exist_ok=True)
+    resp = urlopen(remote_url)
     with ZipFile(BytesIO(resp.read())) as zip_file:
         all_files_and_dirs = zip_file.namelist()
-        zip_file.extractall(local_model_dir)
+        zip_file.extractall(local_dir)
     return all_files_and_dirs
 
 
@@ -379,6 +378,7 @@ class Sybil:
             Output evaluation. See details for :class:`~sybil.model.Evaluation`.
 
         """
+        from sybil.utils.metrics import get_survival_metrics
         if isinstance(series, Serie):
             series = [series]
         elif not isinstance(series, list):

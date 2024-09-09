@@ -118,7 +118,7 @@ class TestPredict(unittest.TestCase):
             pytest.skip(f"Skipping long-running test in {type(self)}.")
 
         # Download demo data
-        demo_data_url = "https://www.dropbox.com/sh/addq480zyguxbbg/AACJRVsKDL0gpq-G9o3rfCBQa?dl=1"
+        demo_data_url = "https://www.dropbox.com/scl/fi/covbvo6f547kak4em3cjd/sybil_example.zip?rlkey=7a13nhlc9uwga9x7pmtk1cf1c&st=dqi0cf9k&dl=1"
         expected_scores = [
             0.021628819563619374,
             0.03857256315036462,
@@ -128,9 +128,9 @@ class TestPredict(unittest.TestCase):
             0.13568094038444453
         ]
 
-        zip_file_name = "SYBIL.zip"
+        zip_file_name = "sybil_example.zip"
         cache_dir = os.path.expanduser("~/.sybil")
-        demo_data_dir = os.path.join(cache_dir, "SYBIL")
+        demo_data_dir = os.path.join(cache_dir, "sybil_example")
         image_data_dir = os.path.join(demo_data_dir, "sybil_demo_data")
         os.makedirs(cache_dir, exist_ok=True)
         download_and_extract_zip(zip_file_name, cache_dir, demo_data_url, demo_data_dir)
