@@ -19,7 +19,7 @@ finally:
 
 from sybil.model import Sybil
 from sybil.serie import Serie
-from sybil.utils.visualization import visualize_attentions, collate_attention_scores
+from sybil.utils.visualization import visualize_attentions, collate_attentions
 import sybil.utils.logging_utils
 
-__all__ = ["Sybil", "Serie", "visualize_attentions", "collate_attention_scores", "__version__"]
+__all__ = ["Sybil", "Serie", "visualize_attentions", "collate_attentions", "__version__"]

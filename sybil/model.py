@@ -106,12 +106,12 @@ def download_sybil(name, cache) -> Tuple[List[str], str]:
     return download_model_paths, download_calib_path
 
 
-def download_and_extract(remote_model_url: str, local_model_dir) -> List[str]:
-    os.makedirs(local_model_dir, exist_ok=True)
-    resp = urlopen(remote_model_url)
+def download_and_extract(remote_url: str, local_dir: str) -> List[str]:
+    os.makedirs(local_dir, exist_ok=True)
+    resp = urlopen(remote_url)
     with ZipFile(BytesIO(resp.read())) as zip_file:
         all_files_and_dirs = zip_file.namelist()
-        zip_file.extractall(local_model_dir)
+        zip_file.extractall(local_dir)
     return all_files_and_dirs
 
 

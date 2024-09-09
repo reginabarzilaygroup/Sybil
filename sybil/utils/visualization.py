@@ -6,7 +6,7 @@ from typing import Dict, List, Union
 import os
 import imageio
 
-def collate_attention_scores(attention_dict: Dict[str, np.ndarray], N: int, eps=1e-6) -> torch.Tensor:
+def collate_attentions(attention_dict: Dict[str, np.ndarray], N: int, eps=1e-6) -> np.ndarray:
     a1 = attention_dict["image_attention_1"]
     v1 = attention_dict["volume_attention_1"]
 
@@ -28,6 +28,23 @@ def collate_attention_scores(attention_dict: Dict[str, np.ndarray], N: int, eps=
         attention_up[attention_up <= eps] = 0.0
 
     return attention_up
+
+def build_overlayed_images(images: List[np.ndarray], attention: np.ndarray, gain: int = 3):
+    overlayed_images = []
+    N = len(images)
+    for i in range(N):
+        overlayed = np.zeros((512, 512, 3))
+        overlayed[..., 2] = images[i]
+        overlayed[..., 1] = images[i]
+        overlayed[..., 0] = np.clip(
+            (attention[0, 0, i, ...] * gain * 256) + images[i],
+            a_min=0,
+            a_max=255,
+        )
+
+        overlayed_images.append(np.uint8(overlayed))
+
+    return overlayed_images
 
 
 def visualize_attentions(
@@ -54,20 +71,9 @@ def visualize_attentions(
     for serie_idx, serie in enumerate(series):
         images = serie.get_raw_images()
         N = len(images)
-        attention_up = collate_attention_scores(attentions[serie_idx], N)
+        cur_attention = collate_attentions(attentions[serie_idx], N)
 
-        overlayed_images = []
-        for i in range(N):
-            overlayed = np.zeros((512, 512, 3))
-            overlayed[..., 2] = images[i]
-            overlayed[..., 1] = images[i]
-            overlayed[..., 0] = np.clip(
-                (attention_up[0, 0, i, ...] * gain * 256) + images[i],
-                a_min=0,
-                a_max=255,
-            )
-
-            overlayed_images.append(np.uint8(overlayed))
+        overlayed_images = build_overlayed_images(images, cur_attention, gain)
 
         if save_directory is not None:
             save_path = os.path.join(save_directory, f"serie_{serie_idx}")
