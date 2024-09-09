@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     attentions = predictions[1]
     attentions = np.array(attentions)
-    print(f"Attention shape: {attentions.shape}")
+    print(f"Ark received attention shape: {attentions.shape}")
 
     # Visualize attention maps
     save_directory = "remote_ark_sybil_attention_output"

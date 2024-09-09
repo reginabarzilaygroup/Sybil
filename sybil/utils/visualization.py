@@ -23,6 +23,7 @@ def collate_attentions(attention_dict: Dict[str, np.ndarray], N: int, eps=1e-6) 
         attention.unsqueeze(0), (N, 512, 512), mode="trilinear"
     )
     attention_up = attention_up.cpu().numpy()
+    attention_up = attention_up.squeeze()
     if eps:
         attention_up[attention_up <= eps] = 0.0
 
@@ -36,7 +37,7 @@ def build_overlayed_images(images: List[np.ndarray], attention: np.ndarray, gain
         overlayed[..., 2] = images[i]
         overlayed[..., 1] = images[i]
         overlayed[..., 0] = np.clip(
-            (attention[0, 0, i, ...] * gain * 256) + images[i],
+            (attention[i, ...] * gain * 256) + images[i],
             a_min=0,
             a_max=255,
         )
