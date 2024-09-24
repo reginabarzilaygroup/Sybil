@@ -347,7 +347,11 @@ def train(args):
             else "max",
         )
         args.callbacks = [checkpoint_callback]
+
     trainer = pl.Trainer.from_argparse_args(args)
+    # Remove callbacks from args for safe pickling later (necessary for multiprocessing)
+    args.callbacks = None
+
     args.global_rank = trainer.global_rank
     args.local_rank = trainer.local_rank
 
