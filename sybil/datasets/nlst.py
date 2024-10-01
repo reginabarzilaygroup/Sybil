@@ -1,3 +1,4 @@
+import gzip
 import math
 import os
 from posixpath import split
@@ -67,6 +68,12 @@ def _get_slice_pos(path):
     return float(dcm.ImagePositionPatient[-1])
 
 
+def open_custom(_path, *args, **kwargs):
+    if _path.endswith(".gz") or _path.endswith(".gzip"):
+        return gzip.open(_path, *args, **kwargs)
+    return open(_path, *args, **kwargs)
+
+
 class NLST_Survival_Dataset(data.Dataset):
     def __init__(self, args, split_group):
         """
@@ -85,7 +92,7 @@ class NLST_Survival_Dataset(data.Dataset):
         self._max_followup = args.max_followup
 
         try:
-            self.metadata_json = json.load(open(args.dataset_file_path, "r"))
+            self.metadata_json = json.load(open_custom(args.dataset_file_path))
         except Exception as e:
             raise Exception(METAFILE_NOTFOUND_ERR.format(args.dataset_file_path, e))
 
@@ -150,7 +157,7 @@ class NLST_Survival_Dataset(data.Dataset):
         for mrn_row in tqdm(self.metadata_json, position=0):
             pid, split, exams, pt_metadata = (
                 mrn_row["pid"],
-                mrn_row["split"],
+                mrn_row.get("split", "unknown split"),
                 mrn_row["accessions"],
                 mrn_row["pt_metadata"],
             )
@@ -283,9 +290,7 @@ class NLST_Survival_Dataset(data.Dataset):
                 img_paths = np.array(img_paths)[uncorrupted_imgs].tolist()
                 slice_locations = np.array(slice_locations)[uncorrupted_imgs].tolist()
 
-        sorted_img_paths, sorted_slice_locs = self.order_slices(
-            img_paths, slice_locations
-        )
+        img_paths, slice_locations = self.order_slices(img_paths, slice_locations)
 
         y, y_seq, y_mask, time_at_event = self.get_label(pt_metadata, screen_timepoint)
 
@@ -295,8 +300,8 @@ class NLST_Survival_Dataset(data.Dataset):
             )
         )
         sample = {
-            "paths": sorted_img_paths,
-            "slice_locations": sorted_slice_locs,
+            "paths": img_paths,
+            "slice_locations": slice_locations,
             "y": int(y),
             "time_at_event": time_at_event,
             "y_seq": y_seq,
