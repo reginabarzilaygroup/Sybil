@@ -5,6 +5,7 @@ import os
 import sys
 
 import pytorch_lightning as pl
+import pytorch_lightning.loggers
 import torch
 
 # sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -348,7 +349,20 @@ def train(args):
         )
         args.callbacks = [checkpoint_callback]
 
-    trainer = pl.Trainer.from_argparse_args(args)
+    logger = True
+    if args.wandb_use:
+        import wandb
+        if args.wandb_key:
+            wandb.login(key=args.wandb_key)
+        wandb_logger = pl.loggers.WandbLogger(
+            name=os.path.basename(args.default_root_dir),
+            project=args.wandb_project,
+            dir=args.default_root_dir,
+        )
+        logger = wandb_logger
+
+
+    trainer = pl.Trainer.from_argparse_args(args, logger=logger)
     # Remove callbacks from args for safe pickling later (necessary for multiprocessing)
     args.callbacks = None
 

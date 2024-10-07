@@ -481,6 +481,11 @@ def add_parser_arguments(parser):
         help="Cache full image locally as well as cachable transforms",
     )
 
+    # logging
+    parser.add_argument("--wandb_use", action="store_true", default=False)
+    parser.add_argument("--wandb_project", type=str, default="sybil-dev")
+    parser.add_argument("--wandb_key", type=str, default="sybil-dev")
+
     parser.add_argument("-l", "--log", "--loglevel", "--log-level",
                         default="INFO", dest="loglevel")
 
