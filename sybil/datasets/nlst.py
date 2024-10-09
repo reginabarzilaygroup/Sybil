@@ -392,17 +392,8 @@ class NLST_Survival_Dataset(data.Dataset):
         return np.array([int(right), int(left), int(other)])
 
     def order_slices(self, img_paths, slice_locations):
-        if not os.path.isabs(img_paths[0]):
-            img_paths = [
-                self.args.img_dir
-                + path[path.find("nlst-ct-png") + len("nlst-ct-png"):]
-                for path in img_paths
-            ]
-        if self.args.img_file_type == "dicom":  # ! NOTE: removing file extension affects get_ct_annotations mapping path to annotation
-            img_paths = [
-                path.replace("nlst-ct-png", "nlst-ct").replace(".png", "")
-                for path in img_paths
-            ]
+        if self.args.img_dir and not os.path.isabs(img_paths[0]):
+            img_paths = [os.path.join(self.args.img_dir, path) for path in img_paths]
 
         if slice_locations is None and self.args.img_file_type == "dicom":
             slice_locations = [_get_slice_pos(img_path) for img_path in img_paths]

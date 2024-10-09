@@ -199,7 +199,7 @@ def add_parser_arguments(parser):
     parser.add_argument(
         "--img_dir",
         type=str,
-        default="/data/rsg/mammogram/NLST/nlst-ct-png",
+        default=None,
         help="Dir of images. Note, image path in dataset jsons should stem from here",
     )
     parser.add_argument(
