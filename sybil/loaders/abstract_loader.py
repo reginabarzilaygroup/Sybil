@@ -145,7 +145,7 @@ class abstract_loader:
             self.composed_all_augmentations = ComposeAug(augmentations)
 
     @abstractmethod
-    def load_input(self, path):
+    def load_input(self, path, sample=None):
         pass
 
     @property
@@ -156,6 +156,11 @@ class abstract_loader:
     def configure_path(self, path, sample=None):
         return path
 
+    def _get_mask(self, input_dict, sample):
+        if self.args.use_annotations:
+            input_dict["mask"] = get_scaled_annotation_mask(sample["annotations"], self.args)
+        return input_dict
+
     def get_image(self, path, sample=None):
         """
         Returns a transformed image by its absolute path.
@@ -165,21 +170,16 @@ class abstract_loader:
         input_dict = {}
         input_path = self.configure_path(path, sample)
 
-        if input_path == self.pad_token:
-            return self.load_input(input_path)
-
         if not self.use_cache:
-            input_dict = self.load_input(input_path)
+            input_dict = self.load_input(input_path, sample)
+
             # hidden loaders typically do not use augmentation
             if self.apply_augmentations:
                 input_dict = self.composed_all_augmentations(input_dict, sample)
             return input_dict
 
-        if self.args.use_annotations:
-            input_dict["mask"] = get_scaled_annotation_mask(
-                input_dict["annotations"], self.args
-            )
-
+        # TODO It looks like the cache is only used for the input image, not the mask
+        # That doesn't seem right. The mask should be cached as well.
         for key, post_augmentations in self.split_augmentations:
             base_key = (
                 DEFAULT_CACHE_DIR + key
@@ -189,6 +189,7 @@ class abstract_loader:
             if self.cache.exists(input_path, base_key):
                 try:
                     input_dict["input"] = self.cache.get(input_path, base_key)
+                    input_dict = self._get_mask(input_dict, sample)
                     if self.apply_augmentations:
                         input_dict = apply_augmentations_and_cache(
                             input_dict,
@@ -198,6 +199,7 @@ class abstract_loader:
                             self.cache,
                             base_key=base_key,
                         )
+
                     return input_dict
                 except Exception as e:
                     print(e)
@@ -206,8 +208,9 @@ class abstract_loader:
                     corrupted_file = self.cache._file_path(key, par_dir, hashed_key)
                     warnings.warn(CORUPTED_FILE_ERR.format(sys.exc_info()[0]))
                     self.cache.rem(input_path, key)
+
         all_augmentations = self.split_augmentations[-1][1]
-        input_dict = self.load_input(input_path)
+        input_dict = self.load_input(input_path, sample)
         if self.apply_augmentations:
             input_dict = apply_augmentations_and_cache(
                 input_dict,
