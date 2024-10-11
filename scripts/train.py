@@ -4,6 +4,8 @@ import pickle
 import os
 import sys
 
+import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import pytorch_lightning.loggers
 import torch
@@ -337,7 +339,8 @@ def train(args):
     if not args.turn_off_checkpointing:
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             dirpath=args.save_dir,
-            save_top_k=1,
+            save_top_k=args.save_top_k,
+            every_n_epochs=1,
             verbose=True,
             monitor="val_{}".format(args.tuning_metric)
             if args.tuning_metric is not None
@@ -387,10 +390,66 @@ def train(args):
         module = module.load_from_checkpoint(checkpoint_path=args.snapshot, strict=False)
         module.args = args
     
-    trainer.fit(module, train_dataset, dev_dataset)
+    # trainer.fit(module, train_dataset, dev_dataset)
     args.model_path = trainer.checkpoint_callback.best_model_path
     print("Saving args to {}".format(args.results_path))
     pickle.dump(vars(args), open(args.results_path, "wb"))
+
+    if args.final_predictions_path:
+        predict_on_dataset(module, dev_dataset, args.limit_val_batches, args.final_predictions_path)
+
+def predict_on_dataset(module, dataset, limit_batches=None, predictions_path=None):
+    print(f"Calculating final predictions on validation dataset and saving to {predictions_path}")
+    import pandas as pd
+    all_predictions = []
+    max_followup = 6
+    num_predict_batches = len(dataset) if limit_batches is None else float("inf")
+    if isinstance(limit_batches, int):
+        num_predict_batches = min(num_predict_batches, limit_batches)
+    elif isinstance(limit_batches, float):
+        num_predict_batches = int(num_predict_batches * limit_batches)
+
+    for ind, batch in enumerate(dataset):
+        if ind >= num_predict_batches:
+            break
+
+        output_dict = module(batch["x"])
+        combined_dict = {**batch, **output_dict}
+
+        scalar_keys = ["accession", "exam", "y", "time_at_event"]
+        vector_keys = ["y_seq", "prob", "logit"]
+
+        batch_dict = {}
+        for key in scalar_keys:
+            if key in combined_dict:
+                batch_dict[key] = np.atleast_1d(combined_dict[key].detach().cpu().numpy().squeeze())
+
+        for vk in vector_keys:
+            if vk in combined_dict:
+                batch_dict[vk] = np.atleast_2d(combined_dict[vk].detach().cpu().numpy().squeeze())
+
+        batch_size = len(batch["x"])
+        # Iterate through batch
+        # Flatten vector outputs to different columns
+        for bi in range(batch_size):
+            predictions_dict = {}
+            for sk in scalar_keys:
+                if sk in batch_dict:
+                    predictions_dict[sk] = batch_dict[sk][bi]
+
+            for vk in vector_keys:
+                cur_vec = batch_dict[vk][bi]
+                for vi in range(max_followup):
+                    predictions_dict[f"{vk}_{vi}"] = cur_vec[vi]
+            all_predictions.append(predictions_dict)
+
+
+    all_predictions = pd.DataFrame.from_records(all_predictions)
+    print(f"Saving final predictions to {predictions_path}")
+    all_predictions.to_csv(predictions_path, index=False)
+
+    return all_predictions
+
 
 
 def test(args):

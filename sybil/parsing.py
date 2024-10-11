@@ -420,6 +420,13 @@ def add_parser_arguments(parser):
     )
 
     parser.add_argument(
+        "--save_top_k",
+        type=int,
+        default=1,
+        help="Save top k models. Set to -1 to save model every epoch.",
+    )
+
+    parser.add_argument(
         "--save_dir", type=str, default="snapshot", help="Where to dump the model"
     )
 
@@ -463,6 +470,13 @@ def add_parser_arguments(parser):
         default=False,
         help="Whether to save attention scores when using attention mechanism",
     )
+
+    parser.add_argument(
+        "--final_predictions_path",
+        default=None,
+        help="Path to save final predictions on the validation set",
+    )
+
     parser.add_argument(
         "--results_path",
         type=str,
