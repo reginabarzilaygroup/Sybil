@@ -524,7 +524,6 @@ class NLST_Survival_Dataset(data.Dataset):
         statement += "\n" + "Censor Times: {}".format(
             Counter([d["time_at_event"] for d in dataset])
         )
-        statement
         return statement
 
     @property

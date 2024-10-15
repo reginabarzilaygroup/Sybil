@@ -53,6 +53,9 @@ class SybilLightning(pl.LightningModule):
     def forward(self, x):
         return self.model(x)
 
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        return self.forward(batch["x"])
+
     def step(self, batch, batch_idx, optimizer_idx, log_key_prefix=""):
         model_output = self(batch["x"])
         logging_dict, predictions_dict = OrderedDict(), OrderedDict()
@@ -396,49 +399,46 @@ def train(args):
     pickle.dump(vars(args), open(args.results_path, "wb"))
 
     if args.final_predictions_path:
-        predict_on_dataset(module, dev_dataset, args.limit_val_batches, args.final_predictions_path)
+        predict_on_dataset(trainer, module, dev_dataset, args.final_predictions_path)
 
-def predict_on_dataset(module, dataset, limit_batches=None, predictions_path=None):
+def predict_on_dataset(trainer: pl.Trainer, module: pl.LightningModule, dataset, predictions_path=None):
     print(f"Calculating final predictions on validation dataset and saving to {predictions_path}")
+    print(f"Length: {len(dataset)}")
     import pandas as pd
     all_predictions = []
     max_followup = 6
-    num_predict_batches = len(dataset) if limit_batches is None else float("inf")
-    if isinstance(limit_batches, int):
-        num_predict_batches = min(num_predict_batches, limit_batches)
-    elif isinstance(limit_batches, float):
-        num_predict_batches = int(num_predict_batches * limit_batches)
 
-    for ind, batch in enumerate(dataset):
-        if ind >= num_predict_batches:
-            break
+    # NOTE: Only works for a single GPU
+    predictions = trainer.predict(module, dataset)
+    if predictions is None:
+        print("No predictions made; did you try using multiple GPUs? This only works in single GPU")
+        return
 
-        output_dict = module(batch["x"])
-        combined_dict = {**batch, **output_dict}
+    for input_batch, output_dict in zip(dataset, predictions):
+        combined_dict = {**input_batch, **output_dict}
 
-        scalar_keys = ["accession", "exam", "y", "time_at_event"]
+        scalar_keys = ["accession", "pid", "exam", "y", "time_at_event"]
         vector_keys = ["y_seq", "prob", "logit"]
-
-        batch_dict = {}
-        for key in scalar_keys:
+        all_keys = scalar_keys + vector_keys
+        for key in all_keys:
             if key in combined_dict:
-                batch_dict[key] = np.atleast_1d(combined_dict[key].detach().cpu().numpy().squeeze())
+                obj = combined_dict[key]
+                if isinstance(obj, torch.Tensor):
+                    obj = obj.detach().cpu().numpy()
+                combined_dict[key] = obj
 
-        for vk in vector_keys:
-            if vk in combined_dict:
-                batch_dict[vk] = np.atleast_2d(combined_dict[vk].detach().cpu().numpy().squeeze())
-
-        batch_size = len(batch["x"])
+        batch_size = len(input_batch["x"])
+        assert batch_size == len(combined_dict["y"]), "Inconsistent batch sizes"
         # Iterate through batch
         # Flatten vector outputs to different columns
         for bi in range(batch_size):
             predictions_dict = {}
             for sk in scalar_keys:
-                if sk in batch_dict:
-                    predictions_dict[sk] = batch_dict[sk][bi]
+                if sk in combined_dict:
+                    predictions_dict[sk] = combined_dict[sk][bi]
 
             for vk in vector_keys:
-                cur_vec = batch_dict[vk][bi]
+                cur_vec = combined_dict[vk][bi]
                 for vi in range(max_followup):
                     predictions_dict[f"{vk}_{vi}"] = cur_vec[vi]
             all_predictions.append(predictions_dict)
