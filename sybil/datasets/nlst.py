@@ -245,7 +245,7 @@ class NLST_Survival_Dataset(data.Dataset):
         # check if restricting to specific slice thicknesses
         slice_thickness = series_data["reconthickness"][0]
         wrong_thickness = (self.args.slice_thickness_filter is not None) and (
-            not math.isclose(slice_thickness, self.args.slice_thickness_filter)
+            slice_thickness > self.args.slice_thickness_filter or (slice_thickness < 0)
         )
 
         # check if valid label (info is not missing)
@@ -509,7 +509,7 @@ class NLST_Survival_Dataset(data.Dataset):
     @property
     def CORRUPTED_PATHS(self):
         if os.path.exists(CORRUPTED_PATHS):
-            return pickle.load(open(CORRUPTED_PATHS, "rb"))
+            return open_custom(CORRUPTED_PATHS)
         else:
             return {"paths": [], "series": []}
 
