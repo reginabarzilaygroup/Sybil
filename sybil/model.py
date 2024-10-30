@@ -124,7 +124,8 @@ def _torch_set_num_threads(threads) -> int:
     if threads < 0:
         return torch.get_num_threads()
     if threads is None or threads == 0:
-        threads = os.cpu_count()
+        # I've never seen a benefit to going higher than 8 and sometimes there is a big slowdown
+        threads = min(8, os.cpu_count())
 
     torch.set_num_threads(threads)
     return torch.get_num_threads()
@@ -315,7 +316,7 @@ class Sybil:
         return_attentions : bool
             If True, returns attention scores for each serie. See README for details.
         threads : int
-            Number of CPU threads to use for PyTorch inference. Default is 0 (use all available cores).
+            Number of CPU threads to use for PyTorch inference.
 
         Returns
         -------
