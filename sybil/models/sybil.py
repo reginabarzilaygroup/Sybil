@@ -1,3 +1,5 @@
+import os.path
+
 import torch
 import torch.nn as nn
 import torchvision
@@ -24,6 +26,8 @@ class SybilNet(nn.Module):
             self.hidden_dim, args, max_followup=args.max_followup
         )
 
+        self._selector = None
+
     def forward(self, x, batch=None):
         output = {}
         x = self.image_encoder(x)
@@ -31,6 +35,9 @@ class SybilNet(nn.Module):
         output["activ"] = x
         output.update(pool_output)
         output["prob"] = pool_output["logit"].sigmoid()
+
+        if self._selector:
+            output["selector"] = self._selector(output)
 
         return output
 
@@ -44,14 +51,25 @@ class SybilNet(nn.Module):
         return pool_output
 
     @staticmethod
-    def load(path):
-        checkpoint = torch.load(path, map_location="cpu")
+    def load(path_or_checkpoint):
+        if isinstance(path_or_checkpoint, dict):
+            checkpoint = path_or_checkpoint
+        else:
+            path = path_or_checkpoint
+            path = os.path.expanduser(path)
+            checkpoint = torch.load(path, map_location="cpu")
+
         args = checkpoint["args"]
         model = SybilNet(args)
 
         # Remove 'model' from param names
         state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
         model.load_state_dict(state_dict)  # type: ignore
+
+        if "selector_model" in checkpoint:
+            from sybil.selector.model import Selector
+            model._selector = Selector(checkpoint)
+
         return model
 
 

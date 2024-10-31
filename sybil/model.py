@@ -66,12 +66,13 @@ NAME_TO_FILE = {
     },
 }
 
-CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip")
+CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://www.dropbox.com/scl/fi/odlulkyux69ipj4uju2xi/sybil_checkpoints_v1.7.0.zip?rlkey=l9dbkjig3txa6sf63ci952kl6&st=3sub5iqa&dl=1")
 
 
 class Prediction(NamedTuple):
     scores: List[List[float]]
     attentions: List[Dict[str, np.ndarray]] = None
+    selector_scores: List[List[float]] = None
 
 
 class Evaluation(NamedTuple):
@@ -95,7 +96,7 @@ def download_sybil(name, cache) -> Tuple[List[str], str]:
 
     download_model_paths = []
     for checkpoint in checkpoints:
-        cur_checkpoint_path = os.path.join(cache, f"{checkpoint}.ckpt")
+        cur_checkpoint_path = os.path.join(cache, f"{checkpoint}.v1.7.ckpt")
         have_all_files &= os.path.exists(cur_checkpoint_path)
         download_model_paths.append(cur_checkpoint_path)
 
@@ -209,11 +210,8 @@ class Sybil:
         args = checkpoint["args"]
         self._max_followup = args.max_followup
         self._censoring_dist = args.censoring_distribution
-        model = SybilNet(args)
+        model = SybilNet.load(checkpoint)
 
-        # Remove model from param names
-        state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
-        model.load_state_dict(state_dict)  # type: ignore
         if self.device is not None:
             model.to(self.device)
 
@@ -274,6 +272,7 @@ class Sybil:
             raise ValueError("Expected either a Serie object or list of Serie objects.")
 
         scores: List[List[float]] = []
+        selector_scores: List[List[float]] = []
         attentions: List[Dict[str, np.ndarray]] = [] if return_attentions else None
         for serie in series:
             if not isinstance(serie, Serie):
@@ -287,6 +286,11 @@ class Sybil:
                 out = model(volume)
                 score = out["logit"].sigmoid().squeeze(0).cpu().numpy()
                 scores.append(score.tolist())
+
+                if "selector" in out:
+                    selector_score = out["selector"]["prob"].squeeze(0)
+                    selector_scores.append(selector_score.tolist())
+
                 if return_attentions:
                     attentions.append(
                         {
@@ -302,7 +306,7 @@ class Sybil:
                         }
                     )
 
-        return Prediction(scores=scores, attentions=attentions)
+        return Prediction(scores=scores, attentions=attentions, selector_scores=selector_scores)
 
     def predict(
         self, series: Union[Serie, List[Serie]], return_attentions: bool = False, threads=0,
@@ -336,16 +340,20 @@ class Sybil:
 
         scores = []
         attentions_ = [] if return_attentions else None
+        selector_scores = []
         attention_keys = None
         for sybil in self.ensemble:
             pred = self._predict(sybil, series, return_attentions)
             scores.append(pred.scores)
+            selector_scores.append(pred.selector_scores)
             if return_attentions:
                 attentions_.append(pred.attentions)
                 if attention_keys is None:
                     attention_keys = pred.attentions[0].keys()
 
         scores = np.mean(np.array(scores), axis=0)
+        # TODO: check if this is the right way to average selector scores
+        selector_scores = np.mean(np.array(selector_scores), axis=0).tolist()
         calib_scores = self._calibrate(scores).tolist()
 
         attentions = None
@@ -359,7 +367,7 @@ class Sybil:
                     ])
                 attentions.append(att)
 
-        return Prediction(scores=calib_scores, attentions=attentions)
+        return Prediction(scores=calib_scores, attentions=attentions, selector_scores=selector_scores)
 
     def evaluate(
         self, series: Union[Serie, List[Serie]], return_attentions: bool = False

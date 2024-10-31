@@ -128,7 +128,7 @@ def predict(
     logger.debug(f"Prediction finished. Results:\n{prediction_scores}")
 
     prediction_path = os.path.join(output_dir, "prediction_scores.json")
-    pred_dict = {"predictions": prediction.scores}
+    pred_dict = {"predictions": prediction.scores, "selector_scores": prediction.selector_scores}
     with open(prediction_path, "w") as f:
         json.dump(pred_dict, f, indent=2)
 
