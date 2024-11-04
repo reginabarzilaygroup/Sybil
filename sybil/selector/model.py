@@ -50,7 +50,7 @@ class Selector:
     def __init__(self, all_models_dict=None):
         self._meta_models = None
         self._meta_scaler = None
-        self._selector = None
+        self._selective_net = None
 
         if all_models_dict is not None:
             self.load_models(all_models_dict)
@@ -61,16 +61,16 @@ class Selector:
         self._meta_scaler = features.FeatureScaler().load_state_dict(meta_models_dict["meta_scaler"])
         assert len(self._meta_models) == 6, f"Expected 6 meta models, found {len(self._meta_models)}"
         input_dim, hidden_dim, num_layers = all_models_dict["selector_model"]["model"]
-        selector = SelectiveNet(
+        selective_net = SelectiveNet(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             num_layers=num_layers)
-        selector.load_state_dict(all_models_dict["selector_model"]["state_dict"])
-        self._selector = selector
+        selective_net.load_state_dict(all_models_dict["selector_model"]["state_dict"])
+        self._selective_net = selective_net
 
     @property
     def dtype(self):
-        return self._selector.dtype
+        return self._selective_net.dtype
 
     @classmethod
     def load_from_file(cls, path):
@@ -82,11 +82,15 @@ class Selector:
         with torch.no_grad():
             base_features = base_model_results["hidden"].to(device)
 
-            base_features_np = base_features.detach().cpu().numpy()
+        base_features_np = base_features.detach().cpu().numpy()
+
+        if "prob" in base_model_results:
+            output_probs = base_model_results["prob"]
+        else:
             base_logits = base_model_results["logit"].to(device)
             base_logits = base_logits[:, keep_cols]
+            output_probs = torch.sigmoid(base_logits)
 
-        output_probs = torch.sigmoid(base_logits)
         output_probs_np = output_probs.detach().cpu().numpy()
         # Need the output_probs to have at least 2 classes
         if output_probs_np.shape[-1] == 1:
@@ -99,7 +103,7 @@ class Selector:
                                                     output_probs=output_probs_np)
         meta_features = torch.from_numpy(meta_features).to(device).to(self.dtype)
 
-        selector_output = self._selector(meta_features)
+        selector_output = self._selective_net(meta_features)
         selector_output_np = selector_output.detach().cpu().numpy()
         selector_probs_np = torch.sigmoid(selector_output).detach().cpu().numpy()
 
@@ -151,7 +155,16 @@ class Selector:
         return meta_features
 
     def to(self, arg):
-        return self._selector.to(arg)
+        self._selective_net.to(arg)
+        return self
+
+    def eval(self):
+        self._selective_net.eval()
+        return self
+
+    def train(self):
+        self._selective_net.train()
+        return self
 
 def entropy(probs):
     """Compute entropy of predicted distribution."""
@@ -184,7 +197,7 @@ def example_load():
     base_selector_output = base_model_results["selector"]
     print(f"Base selector output: {base_selector_output}")
 
-    selector_output = base_net._selector(base_model_results, device=device)
+    selector_output = base_net._selective_net(base_model_results, device=device)
 
     print(f"Selector output:\n{selector_output}")
 

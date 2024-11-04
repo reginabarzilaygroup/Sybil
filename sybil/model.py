@@ -352,7 +352,6 @@ class Sybil:
                     attention_keys = pred.attentions[0].keys()
 
         scores = np.mean(np.array(scores), axis=0)
-        # TODO: check if this is the right way to average selector scores
         selector_scores = np.mean(np.array(selector_scores), axis=0).tolist()
         calib_scores = self._calibrate(scores).tolist()
 
