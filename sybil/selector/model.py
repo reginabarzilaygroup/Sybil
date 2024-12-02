@@ -92,9 +92,13 @@ class Selector:
             output_probs = torch.sigmoid(base_logits)
 
         output_probs_np = output_probs.detach().cpu().numpy()
+        # Just look at final year prediction
+        output_probs_np = output_probs_np[:, -1:]
+
         # Need the output_probs to have at least 2 classes
         if output_probs_np.shape[-1] == 1:
             output_probs_np = np.concatenate([1 - output_probs_np, output_probs_np], axis=-1)
+        assert output_probs_np.shape[-1] >= 2, f"Expected at least 2 classes, found {output_probs_np.shape[-1]}"
 
         base_confidence = torch.max(output_probs, dim=1).values
         base_confidence_np = base_confidence.detach().cpu().numpy()
