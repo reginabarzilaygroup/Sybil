@@ -66,7 +66,7 @@ NAME_TO_FILE = {
     },
 }
 
-CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://www.dropbox.com/scl/fi/odlulkyux69ipj4uju2xi/sybil_checkpoints_v1.7.0.zip?rlkey=l9dbkjig3txa6sf63ci952kl6&st=3sub5iqa&dl=1")
+CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://www.dropbox.com/scl/fi/odlulkyux69ipj4uju2xi/sybil_checkpoints_v1.7.0.zip?rlkey=l9dbkjig3txa6sf63ci952kl6&st=ulqihzjl&dl=1")
 
 
 class Prediction(NamedTuple):
@@ -157,6 +157,8 @@ class Sybil:
 
         """
         self._logger = get_logger()
+        self._cache = os.path.expanduser(cache)
+        self._selector_ref_percentiles = None
         # Download if needed
         if isinstance(name_or_path, str) and (name_or_path in NAME_TO_FILE):
             name_or_path, calibrator_path = download_sybil(name_or_path, cache)
@@ -345,15 +347,22 @@ class Sybil:
         for sybil in self.ensemble:
             pred = self._predict(sybil, series, return_attentions)
             scores.append(pred.scores)
-            selector_scores.append(pred.selector_scores)
+
+            if pred.selector_scores:
+                selector_scores.append(pred.selector_scores)
+
             if return_attentions:
                 attentions_.append(pred.attentions)
                 if attention_keys is None:
                     attention_keys = pred.attentions[0].keys()
 
         scores = np.mean(np.array(scores), axis=0)
-        selector_scores = np.mean(np.array(selector_scores), axis=0).tolist()
         calib_scores = self._calibrate(scores).tolist()
+
+        selector_percentiles = None
+        if selector_scores:
+            selector_scores = np.mean(np.array(selector_scores), axis=0).tolist()
+            selector_percentiles = [self.get_percentile(score) for score in selector_scores]
 
         attentions = None
         if return_attentions:
@@ -366,7 +375,47 @@ class Sybil:
                     ])
                 attentions.append(att)
 
-        return Prediction(scores=calib_scores, attentions=attentions, selector_scores=selector_scores)
+        return Prediction(scores=calib_scores, attentions=attentions, selector_scores=selector_percentiles)
+
+    def _get_ref_percentiles(self) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        if self._selector_ref_percentiles is not None:
+            return self._selector_ref_percentiles
+        percentile_table_path = os.path.join(self._cache, "selector_statistics_combined_percentiles.csv")
+        if not os.path.exists(percentile_table_path):
+            return None
+
+        header_row = open(percentile_table_path).readline().strip().split(",")
+        table_data = np.loadtxt(percentile_table_path, delimiter=",", skiprows=1)
+        value_col_name = "mean"
+        mean_col = header_row.index(value_col_name)
+        self._selector_ref_percentiles = (table_data[:, 0], table_data[:, mean_col])
+        return self._selector_ref_percentiles
+
+    def get_percentile(self, score: float) -> Union[float, np.ndarray]:
+        """Get percentile of scores relative to reference percentiles.
+        Essentially a lookup table for the percentile of a given score relative to a reference distribution.
+
+        Parameters
+        ----------
+        score : float
+            Risk scores to get percentiles for.
+
+        Returns
+        -------
+        float :
+            Percentile of scores relative to reference percentiles.
+        """
+
+        ref_percentiles = self._get_ref_percentiles()
+        if ref_percentiles is None:
+            self._logger.warning("No percentile table found for selector.")
+            return -1
+
+        perc_loc = np.searchsorted(ref_percentiles[1], score)
+        perc_loc = perc_loc-1 if perc_loc >= 1 else perc_loc
+        percentile = ref_percentiles[0][perc_loc] / 100.0
+        return percentile
+
 
     def evaluate(
         self, series: Union[Serie, List[Serie]], return_attentions: bool = False
