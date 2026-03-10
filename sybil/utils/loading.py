@@ -8,7 +8,7 @@ from torch.utils import data
 
 from sybil.utils.sampler import DistributedWeightedSampler
 from sybil.augmentations import get_augmentations
-from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader
+from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader, SegmentationLoader
 
 string_classes = (str, bytes)
 int_classes = int
@@ -162,6 +162,7 @@ def get_sample_loader(
     split_group: Literal["train", "dev", "test"],
     args: Namespace,
     apply_augmentations=True,
+    version = "v1",
 ):
     """[summary]
 
@@ -172,6 +173,9 @@ def get_sample_loader(
     ``args`` : Namespace
         global args
     ``apply_augmentations`` : bool, optional (default=True)
+            whether to apply augmentations or not. This is useful to set to False for dev/test splits, where we want to evaluate on the original data distribution.
+    ``version``: str, optional (default="v1")
+        version of the sample loader to use. This is useful for testing new sample loaders while keeping
 
     Returns
     -------
@@ -183,10 +187,13 @@ def get_sample_loader(
     NotImplementedError
         img_file_type must be one of "dicom" or "png"
     """
-    augmentations = get_augmentations(split_group, args)
-    if args.img_file_type == "dicom":
-        return DicomLoader(args.cache_path, augmentations, args, apply_augmentations)
-    elif args.img_file_type == "png":
-        return OpenCVLoader(args.cache_path, augmentations, args, apply_augmentations)
-    else:
-        raise NotImplementedError
+    if version == "v1":
+        augmentations = get_augmentations(split_group, args)
+        if args.img_file_type == "dicom":
+            return DicomLoader(args.cache_path, augmentations, args, apply_augmentations)
+        elif args.img_file_type == "png":
+            return OpenCVLoader(args.cache_path, augmentations, args, apply_augmentations)
+        else:
+            raise NotImplementedError
+    elif version == "v2":
+        return SegmentationLoader(args.cache_path, None, args, False)

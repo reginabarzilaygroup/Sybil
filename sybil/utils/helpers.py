@@ -1,4 +1,3 @@
-from sybil.datasets.validation import CSVDataset
 from sybil.datasets.nlst import *
 from sybil.datasets.mgh import MGH_Screening
 

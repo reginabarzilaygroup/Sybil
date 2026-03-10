@@ -1,14 +1,25 @@
 import functools
-from typing import List, Optional, NamedTuple, Literal
+from typing import Any, Dict, List, Optional, NamedTuple, Literal, Union, Tuple
 from argparse import Namespace
-
+import cc3d
 import torch
 import numpy as np
 import pydicom
 import torchio as tio
-
+import torch.nn.functional as F
+from monai.data import MetaTensor
 from sybil.datasets.utils import order_slices, VOXEL_SPACING
 from sybil.utils.loading import get_sample_loader
+
+
+def _pad_axis(lo: int, hi: int, min_size: int, max_size: int):
+    """Symmetrically expand [lo, hi+1) to at least min_size, clamped to [0, max_size]."""
+    size = hi - lo + 1
+    pad = max(0, min_size - size)
+    lo = max(0, lo - pad // 2)
+    hi = min(max_size, lo + max(size, min_size))
+    lo = max(0, hi - max(size, min_size))
+    return lo, hi
 
 
 class Meta(NamedTuple):
@@ -26,23 +37,31 @@ class Label(NamedTuple):
     y_mask: np.ndarray
     censor_time: int
 
+class InputV2(NamedTuple):
+    segmentation_volume: torch.Tensor
+    rve_volume: Optional[torch.Tensor] = None
+    lungmask_volume: Optional[torch.Tensor] = None
 
 class Serie:
     def __init__(
         self,
-        dicoms: List[str],
+        dicoms: Union[List[str], Dict[str, List[str]]],
         voxel_spacing: Optional[List[float]] = None,
         label: Optional[int] = None,
         censor_time: Optional[int] = None,
         file_type: Literal["png", "dicom"] = "dicom",
         split: Literal["train", "dev", "test"] = "test",
+        version: Literal["v1", "v2"] = "v1",
+
     ):
         """Initialize a Serie.
 
         Parameters
         ----------
-        `dicoms` : List[str]
-            [description]
+        `dicoms` : Union[List[str], [str, dict]]
+            List of dicom paths or dicom metadata dicts.
+            If dicts are provided and `multi_scan` is False,
+            they are converted into a flat list of paths.
         `voxel_spacing`: Optional[List[float]], optional
             The voxel spacing associated with input CT
             as (row spacing, col spacing, slice thickness)
@@ -57,23 +76,48 @@ class Serie:
         `split`: Literal['train', 'dev', 'test']
             Dataset split into which the serie falls into.
             Assumed to be test by default
+        `version`: Literal['v1', 'v2']
+            Version of the dataset. Affects how metadata is extracted from DICOM files.
+            Assumed to be v1 by default.
         """
         if label is not None and censor_time is None:
             raise ValueError("censor_time should also provided with label.")
         if file_type == "png" and voxel_spacing is None:
             raise ValueError("voxel_spacing should be provided for PNG files.")
+        
+        self._is_version1 = version == "v1"
+        self._is_version2 = version == "v2"
+        if self._is_version1 and isinstance(dicoms, dict) and len(dicoms) > 1:
+            raise ValueError("Multiple dicom dicts provided for version 1. Expected a single dict or a list of paths.")
+
+        if self._is_version1 and isinstance(dicoms, dict):
+            dicoms = self._convert_dicom_dicts_to_paths(dicoms)
 
         self._censor_time = censor_time
         self._label = label
-        args = self._load_args(file_type)
-        self._args = args
-        self._loader = get_sample_loader(split, args)
-        self._meta = self._load_metadata(dicoms, voxel_spacing, file_type)
-        self._check_valid(args)
-        self.resample_transform = tio.transforms.Resample(target=VOXEL_SPACING)
-        self.padding_transform = tio.transforms.CropOrPad(
-            target_shape=tuple(args.img_size + [args.num_images]), padding_mode=0
-        )
+        if self._is_version1: 
+            args = self._load_argsv1(file_type)
+            self._args = args
+            self._meta = self._load_metadata(dicoms, voxel_spacing, file_type)
+            self._check_valid(args)
+            self.resample_transform = tio.transforms.Resample(target=VOXEL_SPACING)
+            self.padding_transform = tio.transforms.CropOrPad(
+                target_shape=tuple(args.img_size + [args.num_images]), padding_mode=0
+            )
+        elif self._is_version2:
+            args = self._load_argsv2(file_type)
+            self._args = args
+            self._meta = {k: self._load_metadata(dcms, voxel_spacing, file_type)  for k, dcms in dicoms.items()}
+            raise NotImplementedError("Version 2 is not yet implemented. Stay tuned!")
+        
+        self._loader = get_sample_loader(split, args, version=version)
+
+    def _convert_dicom_dicts_to_paths(
+        self, dicoms: Dict[str, List[str]]
+    ) -> List[str]:
+        assert len(dicoms) == 1, "Expected only one dicom dict when multi_scan is False."
+        key = list(dicoms.keys())[0]
+        return dicoms[key]
 
     def has_label(self) -> bool:
         """Check if there is a label associated with this serie.
@@ -138,8 +182,64 @@ class Serie:
         images = [i["input"] for i in input_dicts]
         return images
 
-    @functools.lru_cache
-    def get_volume(self) -> torch.Tensor:
+    @functools.lru_cache    
+    def get_volume(self) -> Union[torch.Tensor, Dict[str, InputV2]]:
+        if self._is_version1:
+            return self._get_volume_v1()
+        elif self._is_version2:
+            return self._get_volume_v2()
+        else:
+            raise ValueError("Invalid version. Expected 'v1' or 'v2'.")
+    
+    def _get_volume_v2(self):
+        volumes = {}
+        for key, meta in self._meta.items():
+            # rve sample 
+            rve_volume = self._get_volume_for_rve()
+            lungmask_volume, segmentation_volume = self._get_volume_for_segmentation()
+            volumes[key] = InputV2(
+                lungmask_volume=lungmask_volume, # shared with confidence model
+                segmentation_volume=segmentation_volume, # shared with confidence model
+                rve_volume=rve_volume,
+            )
+        return volumes
+    
+    def _get_volume_for_rve(self) -> Optional[torch.Tensor]:
+        raise NotImplementedError("RVE volume loading is not yet implemented. Stay tuned!")
+    
+    def _get_volume_for_segmentation(self) -> List[torch.Tensor, torch.Tensor]:
+        # sample for segmentation
+        image = np.stack([
+            self._loader.load_input(path)["input"] for path in self._meta.paths
+        ], axis=0)  # (N, H, W)
+        # segmentation
+        affine = torch.diag(self._meta.voxel_spacing)
+        image = MetaTensor(
+            image,
+            affine=affine,
+            dtype=torch.float32,
+        )
+
+        # Ensure image and label have the correct spatial size (args.img_size)
+        H, W = 1024, 1024
+        img_h, img_w = image.shape[0], image.shape[1]
+        if (img_h, img_w) != (H, W):
+            # image: (H, W, D), label: (H, W, D)
+            # Add batch and channel dims for interpolation: (1, 1, D, H, W)
+            resize_image = image.permute(2, 0, 1).unsqueeze(1)
+            resize_image = F.interpolate(
+                resize_image,
+                size=(H, W),
+                mode="bilinear",
+                align_corners=False,
+            )
+            resize_image = resize_image.permute(1, 0, 2, 3)
+        else:
+            resize_image = resize_image.unsqueeze(0)
+
+        return image, resize_image
+
+    def _get_volume_v1(self) -> torch.Tensor:
         """
         Load loaded 3D CT volume
 
@@ -148,7 +248,6 @@ class Serie:
         torch.Tensor
             CT volume of shape (1, C, N, H, W)
         """
-
         input_dicts = [
             self._loader.get_image(path) for path in self._meta.paths
         ]
@@ -222,7 +321,7 @@ class Serie:
         )
         return meta
 
-    def _load_args(self, file_type):
+    def _load_argsv1(self, file_type):
         """
         Load default args required for a single Serie volume
 
@@ -236,6 +335,37 @@ class Serie:
         Namespace
             args with preset values
         """
+        args = Namespace(
+            **{
+                "img_size": [256, 256],
+                "img_mean": [128.1722],
+                "img_std": [87.1849],
+                "num_images": 200,
+                "img_file_type": file_type,
+                "num_chan": 3,
+                "cache_path": None,
+                "use_annotations": False,
+                "fix_seed_for_multi_image_augmentations": True,
+                "slice_thickness_filter": 5,
+            }
+        )
+        return args
+
+    def _load_argsv2(self, file_type):
+        """
+        Load default args required for a single Serie volume
+
+        Parameters
+        ----------
+        file_type : Literal['png', 'dicom']
+            File type of CT slices
+
+        Returns
+        -------
+        Namespace
+            args with preset values
+        """
+        raise NotImplementedError("Version 2 is not yet implemented. Stay tuned!")
         args = Namespace(
             **{
                 "img_size": [256, 256],
@@ -275,3 +405,125 @@ class Serie:
             )
         if self._meta.voxel_spacing is None:
             raise ValueError("voxel spacing either not set or not found in DICOM")
+
+    def prepare_for_confidence_model(
+        self,
+        sparse_seg: torch.Tensor,
+        image: torch.Tensor,
+        nodule_mask: torch.Tensor,
+        crop_size: Tuple[int, int, int] = (128, 128, 32),
+    ) -> torch.Tensor:
+        """Prepare 2-channel (CT + segmentation probability) crops for the confidence model.
+
+        For each nodule in ``sparse_seg``, the bounding box is symmetrically padded to
+        ``crop_size``, then both the CT image and the soft nodule probability are cropped
+        and stacked into a 2-channel patch.
+
+        Parameters
+        ----------
+        sparse_seg : torch.Tensor (sparse COO)
+            Sparse tensor of shape (H, W, D) with integer nodule IDs as values.
+        image : torch.Tensor
+            CT volume of shape (H, W, D).
+        nodule_mask : torch.Tensor
+            Binary mask of shape (D, H, W) from the segmentation model.
+        crop_size : tuple
+            (min_height, min_width, min_depth) for each patch.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape (N_nodules, 2, H_crop, W_crop, D_crop).
+        """
+        H_CROP, W_CROP, D_CROP = crop_size
+        img_h, img_w, img_d = image.shape
+
+        sparse_seg = sparse_seg.coalesce()
+        nodule_ids = sparse_seg.values().unique()
+        nodule_ids = nodule_ids[nodule_ids > 0]
+
+        patches = []
+        for nid in nodule_ids:
+            mask = sparse_seg.values() == nid
+            ys, xs, zs = sparse_seg.indices()[:, mask]
+
+            ymin, ymax = ys.min().item(), ys.max().item()
+            xmin, xmax = xs.min().item(), xs.max().item()
+            zmin, zmax = zs.min().item(), zs.max().item()
+
+            # symmetrically pad bounding box to reach minimum crop dimensions
+            y1, y2 = _pad_axis(ymin, ymax, H_CROP, img_h)
+            x1, x2 = _pad_axis(xmin, xmax, W_CROP, img_w)
+            z1, z2 = _pad_axis(zmin, zmax, D_CROP, img_d)
+
+            patchx = image[y1:y2, x1:x2, z1:z2]  # (H_crop, W_crop, D_crop)
+
+            # place nodule probability into a zero canvas, then crop
+            patch_seg = torch.zeros(img_h, img_w, img_d, dtype=nodule_mask.dtype)
+            patch_seg[ymin:ymax + 1, xmin:xmax + 1, zmin:zmax + 1] = (
+                nodule_mask[zmin:zmax + 1, ymin:ymax + 1, xmin:xmax + 1].permute(1, 2, 0)
+            )
+            patchl = patch_seg[y1:y2, x1:x2, z1:z2]
+
+            patches.append(torch.stack([patchx, patchl]))  # (2, H_crop, W_crop, D_crop)
+
+        if patches:
+            return torch.stack(patches)  # (N, 2, H_crop, W_crop, D_crop)
+        return torch.zeros(0, 2, H_CROP, W_CROP, D_CROP)
+
+    def prepare_for_malignancy_model(
+        self,
+        sparse_seg: torch.Tensor,
+        image: torch.Tensor,
+        crop_size: Tuple[int, int, int] = (128, 128, 32),
+    ) -> torch.Tensor:
+        """Prepare CT crops centred on each nodule for the malignancy model.
+
+        Parameters
+        ----------
+        sparse_seg : torch.Tensor (sparse COO)
+            Sparse tensor of shape (H, W, D) with integer nodule IDs as values.
+        image : torch.Tensor
+            CT volume of shape (H, W, D).
+        crop_size : tuple
+            (height, width, depth) of the output patch.
+
+        Returns
+        -------
+        torch.Tensor
+            Shape (N_nodules, H_crop, W_crop, D_crop).
+        """
+        H_CROP, W_CROP, D_CROP = crop_size
+        img_h, img_w, img_d = image.shape
+
+        sparse_seg = sparse_seg.coalesce()
+        nodule_ids = sparse_seg.values().unique()
+        nodule_ids = nodule_ids[nodule_ids > 0]
+
+        patches = []
+        for nid in nodule_ids:
+            mask = sparse_seg.values() == nid
+            ys, xs, zs = sparse_seg.indices()[:, mask]
+
+            ycenter = (ys.min().item() + ys.max().item()) // 2
+            xcenter = (xs.min().item() + xs.max().item()) // 2
+            zcenter = (zs.min().item() + zs.max().item()) // 2
+
+            ymin = max(0, ycenter - H_CROP // 2)
+            ymax = min(img_h, ymin + H_CROP)
+            if ymax - ymin < H_CROP:
+                ymin = max(0, ymax - H_CROP)
+
+            xmin = max(0, xcenter - W_CROP // 2)
+            xmax = min(img_w, xmin + W_CROP)
+            if xmax - xmin < W_CROP:
+                xmin = max(0, xmax - W_CROP)
+
+            zmin = max(0, zcenter - D_CROP // 2)
+            zmax = min(img_d, zmin + D_CROP)
+
+            patches.append(image[ymin:ymax, xmin:xmax, zmin:zmax])  # (H_crop, W_crop, D_crop)
+
+        if patches:
+            return torch.stack(patches)  # (N, H_crop, W_crop, D_crop)
+        return torch.zeros(0, H_CROP, W_CROP, D_CROP)

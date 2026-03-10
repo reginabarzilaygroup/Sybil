@@ -11,7 +11,7 @@ import pickle
 import typing
 from typing import Literal
 
-import sybil.utils.logging_utils
+from loguru import logger
 import sybil.datasets.utils
 from sybil import Serie, Sybil, visualize_attentions, __version__
 
@@ -87,7 +87,6 @@ def predict(
     file_type: Literal["auto", "dicom", "png"] = "auto",
     threads: int = 0,
 ):
-    logger = sybil.utils.logging_utils.get_logger()
 
     return_attentions |= write_attention_images
 
