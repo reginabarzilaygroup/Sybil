@@ -6,7 +6,7 @@ Lung Cancer Risk Prediction.
 
 Additional documentation can be found on the [GitHub Wiki](https://github.com/reginabarzilaygroup/Sybil/wiki).
 
-# Run a regression test
+## Run a regression test
 
 ```shell
 python tests/regression_test.py
@@ -15,7 +15,7 @@ python tests/regression_test.py
 This will download the`sybil_ensemble` model and sample data, and compare the results to what has previously been calculated.
 
 
-# Run the model
+## Run the model
 
 You can load our pretrained model trained on the NLST dataset, and score a given DICOM serie as follows:
 
@@ -34,11 +34,9 @@ serie = Serie([dicom_path_1, dicom_path_2, ...], label=1)
 results = model.evaluate([serie])
 ```
 
-Models available include: `sybil_1`, `sybil_2`, `sybil_3`, `sybil_4`, `sybil_5` and `sybil_ensemble`.
-
 All model files are available on [GitHub releases](https://github.com/reginabarzilaygroup/Sybil/releases) as well as [here](https://drive.google.com/drive/folders/1nBp05VV9mf5CfEO6W5RY4ZpcpxmPDEeR?usp=sharing).
 
-# Replicating results
+## Replicating results
 
 You can replicate the results from our model using our training script:
 
@@ -47,6 +45,48 @@ python train.py
 ```
 
 See our [documentation](docs/readme.md) for a full description of Sybil's training parameters. Additional information on the training process can be found on the [train](https://github.com/reginabarzilaygroup/Sybil/tree/train) branch of this repository.
+
+
+# Sybil-2
+Sybil-2 is a new version of the Sybil model that can ingest multiple scans and performs nodule segmentation and tracking. 
+
+## Environment 
+
+1. Create a new conda environment and install the dependencies from the `environment-v2.yaml` file.
+
+```
+mamba env create -f environment-v2.yaml
+mamba activate sybil2
+```
+
+2. Install the dependency on the Rad Vision Engine. This is a separate repository that contains the code for the nodule segmentation and tracking model.
+   
+  ```
+  git clone https://github.com/yalalab/rad-vision-engine ../rad-vision-engine
+  cd ../rad-vision-engine && git checkout release
+  cd ../pillar-finetune
+  pip install -e ../rad-vision-engine
+  ```
+
+
+## Run the model
+```python
+from sybil import Serie, Sybil2
+
+# Load a trained model
+model = Sybil2()
+
+# Get risk scores
+serie = Serie({
+  "first_exam": [dicom_path_1, dicom_path_2, ...],
+  "second_exam": [dicom_path_1, dicom_path_2, ...],
+  })
+scores = model.predict([serie])
+```
+
+## Replicating results
+
+
 
 
 # LDCT Orientation
