@@ -17,7 +17,7 @@ except PackageNotFoundError:  # pragma: no cover
 finally:
     del version, PackageNotFoundError
 
-from sybil.model import Sybil
+from sybil.model import Sybil, Sybil2
 from sybil.serie import Serie
 from sybil.utils.visualization import visualize_attentions, collate_attentions
 

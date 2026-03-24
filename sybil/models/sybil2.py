@@ -58,7 +58,7 @@ class DiffNet1(nn.Module):
         # project global features to diffnet model hidden dim - 6 (for logit)
         self.global_feature_proj = nn.Linear(1152, self.hidden_dim - 6)
         # project nodule features to diffnet model hidden dim - 3 (for malignancy score, volume, and segmentation confidence)
-        self.nodule_feature_proj = nn.Linear(512, self.hidden_dim - 3)  # TODO
+        self.nodule_feature_proj = nn.Linear(512, self.hidden_dim - 3)  
         # nodule entity embedding
         self.entity_embedding = nn.Embedding(100, self.hidden_dim)
         # nodule timepoint embedding, continuous

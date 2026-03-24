@@ -8,7 +8,7 @@ from torch.utils import data
 
 from sybil.utils.sampler import DistributedWeightedSampler
 from sybil.augmentations import get_augmentations
-from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader, SegmentationLoader
+from sybil.loaders.image_loaders import OpenCVLoader, DicomLoader, NiftiLoader, PillarLoader
 
 string_classes = (str, bytes)
 int_classes = int
@@ -196,4 +196,8 @@ def get_sample_loader(
         else:
             raise NotImplementedError
     elif version == "v2":
-        return SegmentationLoader(args.cache_path, None, args, False)
+        nifti_loader = NiftiLoader(args.cache_path, None, args, False)
+        pillar_loader = PillarLoader(args.cache_path, None, args, False)
+        return {"nifti": nifti_loader, "pillar": pillar_loader}
+    else:
+        raise NotImplementedError

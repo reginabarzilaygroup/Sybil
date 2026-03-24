@@ -24,6 +24,8 @@ def pydicom_to_nifti(paths, output_path, return_nifti=False, save_nifti=True):
         ],
         axis=0,
     )
+    if (not return_nifti) and (not save_nifti):
+        return volume
 
     # --- 2. Convert to ITK Image ---
     # This creates a wrapper, avoiding memory duplication

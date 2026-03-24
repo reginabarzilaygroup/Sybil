@@ -43,7 +43,8 @@ def link_nodules_by_center_distance(tp2nodules: Dict, distance_threshold: float 
         }
         linked_past_ids = set()
 
-        for tid, track_data in list(tracked.items()):
+        tracks_to_update = list(tracked.items())
+        for tid, track_data in tracks_to_update:
             if current_round not in track_data:
                 continue
             current_meta = track_data[current_round]

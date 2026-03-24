@@ -1,4 +1,5 @@
 import functools
+import os
 from typing import Any, Dict, List, Optional, NamedTuple, Literal, Union, Tuple
 from argparse import Namespace
 import cc3d
@@ -8,10 +9,11 @@ import pydicom
 import torchio as tio
 import torch.nn.functional as F
 from monai.data import MetaTensor
+from loguru import logger
 from sybil.datasets.utils import order_slices, VOXEL_SPACING
 from sybil.utils.loading import get_sample_loader
-
-
+from sybil.utils.dicom_to_nifti import pydicom_to_nifti
+        
 def _pad_axis(lo: int, hi: int, min_size: int, max_size: int):
     """Symmetrically expand [lo, hi+1) to at least min_size, clamped to [0, max_size]."""
     size = hi - lo + 1
@@ -29,6 +31,7 @@ class Meta(NamedTuple):
     manufacturer: str
     slice_positions: list
     voxel_spacing: torch.Tensor
+    nifti_path: Optional[str] = None
 
 
 class Label(NamedTuple):
@@ -52,6 +55,7 @@ class Serie:
         file_type: Literal["png", "dicom"] = "dicom",
         split: Literal["train", "dev", "test"] = "test",
         version: Literal["v1", "v2"] = "v1",
+        cache_dir: Optional[str] = None,
 
     ):
         """Initialize a Serie.
@@ -79,6 +83,9 @@ class Serie:
         `version`: Literal['v1', 'v2']
             Version of the dataset. Affects how metadata is extracted from DICOM files.
             Assumed to be v1 by default.
+        `cache_dir`: Optional[str]
+            Optional directory to use for caching processed images. If None, no caching is used.
+            Caching can speed up loading for large datasets, but requires additional disk space.
         """
         if label is not None and censor_time is None:
             raise ValueError("censor_time should also provided with label.")
@@ -89,6 +96,11 @@ class Serie:
         self._is_version2 = version == "v2"
         if self._is_version1 and isinstance(dicoms, dict) and len(dicoms) > 1:
             raise ValueError("Multiple dicom dicts provided for version 1. Expected a single dict or a list of paths.")
+
+        if self._is_version2:
+            assert cache_dir is not None, "Version 2 requires a cache directory for storing intermediate NIfTI files."
+        
+        self._cache_dir = cache_dir
 
         if self._is_version1 and isinstance(dicoms, dict):
             dicoms = self._convert_dicom_dicts_to_paths(dicoms)
@@ -108,7 +120,6 @@ class Serie:
             args = self._load_argsv2(file_type)
             self._args = args
             self._meta = {k: self._load_metadata(dcms, voxel_spacing, file_type)  for k, dcms in dicoms.items()}
-            raise NotImplementedError("Version 2 is not yet implemented. Stay tuned!")
         
         self._loader = get_sample_loader(split, args, version=version)
 
@@ -195,24 +206,28 @@ class Serie:
         volumes = {}
         for key, meta in self._meta.items():
             # rve sample 
-            rve_volume = self._get_volume_for_rve()
-            lungmask_volume, segmentation_volume = self._get_volume_for_segmentation()
+            nifti_volume = pydicom_to_nifti(meta.paths, meta.nifti_path, return_nifti=False, save_nifti=True)
+            logger.debug(f"Saved NIfTI for {key} at {meta.nifti_path}")
+            rve_volume = self._get_volume_for_rve(meta.nifti_path)
+            lungmask_volume, segmentation_volume = self._get_volume_for_segmentation(nifti_volume)
             volumes[key] = InputV2(
                 lungmask_volume=lungmask_volume, # shared with confidence model
                 segmentation_volume=segmentation_volume, # shared with confidence model
                 rve_volume=rve_volume,
             )
         return volumes
+
+    def _get_volume_for_rve(self, nifti_path: str) -> Optional[torch.Tensor]:
+        # NOTE: consider passing volume instead to avoid redundant loading
+        volume = self._loader['pillar'].load_input(nifti_path)["input"]
+        # delete nifti_file after loading to save space
+        if self._cache_dir is not None and os.path.exists(nifti_path):
+            os.remove(nifti_path)
+            logger.debug(f"Deleted cached NIfTI at {nifti_path} after loading RVE volume.")
+        return volume
     
-    def _get_volume_for_rve(self) -> Optional[torch.Tensor]:
-        raise NotImplementedError("RVE volume loading is not yet implemented. Stay tuned!")
-    
-    def _get_volume_for_segmentation(self) -> List[torch.Tensor, torch.Tensor]:
-        # sample for segmentation
-        image = np.stack([
-            self._loader.load_input(path)["input"] for path in self._meta.paths
-        ], axis=0)  # (N, H, W)
-        # segmentation
+    def _get_volume_for_segmentation(self, image: np.ndarray) -> List[torch.Tensor, torch.Tensor]:
+        image = self._loader['nifti'].load_input(image)["input"]
         affine = torch.diag(self._meta.voxel_spacing)
         image = MetaTensor(
             image,
@@ -310,6 +325,9 @@ class Serie:
             voxel_spacing = (
                 torch.tensor(voxel_spacing + [1]) if voxel_spacing is not None else None
             )
+        
+        identifier = paths[0].split("/")[-2] # folder name
+        nifti_path = os.path.join(self._cache_dir, f"{identifier}.nii.gz") if self._cache_dir is not None else None
 
         meta = Meta(
             paths=processed_paths,
@@ -318,6 +336,7 @@ class Serie:
             manufacturer=manufacturer,
             slice_positions=slice_positions,
             voxel_spacing=voxel_spacing,
+            nifti_path=nifti_path,
         )
         return meta
 
