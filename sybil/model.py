@@ -462,7 +462,7 @@ class Sybil:
 class Sybil2: 
     def __init__(
         self,
-        name_or_path: Union[List[str], str] = "sybil_ensemble",
+        name_or_path: Union[List[str], str] = "sybil2",
         cache: str = "~/.sybil/",
         calibrator_path: Optional[str] = None,
         device: Optional[str] = None,
@@ -520,9 +520,7 @@ class Sybil2:
         
         self.confidence_model = self.load_confidence_model(name_or_path[0])
 
-        self.ensemble = torch.nn.ModuleList()
-        for path in name_or_path:
-            self.ensemble.append(self.load_model(path))
+        self.model = self.load_model(name_or_path)
         self.to(self.device)
         logger.info(f"Loaded Sybil2 ensemble with {len(self.ensemble)} model(s)")
 
@@ -535,9 +533,9 @@ class Sybil2:
 
     def load_model(self, path):
         logger.debug(f"Loading Sybil2 malignancy model from {path}")
-        args = None
-        model = Sybil17(args)
-        logger.debug("Initialized Sybil17 malignancy model")
+        checkpoint = torch.load(path, weights_only=False, map_location="cpu")
+        model = Sybil17(checkpoint["args"]).load_state_dict(checkpoint["state_dict"]).eval()
+        logger.debug("Initialized Sybil2 malignancy model")
         return model
     
     def load_lungmask_model(self, path):
@@ -819,15 +817,15 @@ class Sybil2:
     @torch.inference_mode()
     def _predict(
         self,
-        model: SybilNet,
+        model: Sybil17,
         series: Union[Serie, List[Serie]],
     ) -> Prediction:
         """Run predictions over the given serie(s).
 
         Parameters
         ----------
-        model: SybilNet
-            Instance of SybilNet
+        model: Sybil17  
+            Instance of Sybil17
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
         
@@ -865,7 +863,6 @@ class Sybil2:
             scores.append(score.tolist())
             logger.debug("Computed Sybil2 risk score for one serie")
             
-
         return Prediction(scores=scores)
 
     def predict(
@@ -900,12 +897,8 @@ class Sybil2:
             logger.info(f"Selected inference device dynamically: {self.device}")
         logger.debug(f"Beginning prediction on device: {self.device}")
 
-        scores = []
-        for sybil in self.ensemble:
-            pred = self._predict(sybil, series)
-            scores.append(pred.scores)
-
-        scores = np.mean(np.array(scores), axis=0)
+        pred = self._predict(self.model, series)
+        scores = pred.scores
         calib_scores = self._calibrate(scores).tolist()
         logger.info(f"Completed Sybil2 ensemble inference for {len(scores)} serie(s)")
 
