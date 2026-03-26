@@ -19,6 +19,15 @@ finally:
 
 from sybil.model import Sybil, Sybil2
 from sybil.serie import Serie
+from sybil.datasets.sybil_dataset import SybilV2Dataset
 from sybil.utils.visualization import visualize_attentions, collate_attentions
 
-__all__ = ["Sybil", "Sybil2", "Serie", "visualize_attentions", "collate_attentions", "__version__"]
+__all__ = [
+    "Sybil",
+    "Sybil2",
+    "Serie",
+    "SybilV2Dataset",
+    "visualize_attentions",
+    "collate_attentions",
+    "__version__",
+]
