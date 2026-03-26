@@ -1,6 +1,6 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pgmikhael/Sybil/blob/main/LICENSE.txt) ![version](https://img.shields.io/badge/version-1.2.0-success)
-
 # Sybil
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pgmikhael/Sybil/blob/main/LICENSE.txt) ![version](https://img.shields.io/badge/version-1.2.0-success)
 
 Lung Cancer Risk Prediction.
 
@@ -12,8 +12,7 @@ Additional documentation can be found on the [GitHub Wiki](https://github.com/re
 python tests/regression_test.py
 ```
 
-This will download the`sybil_ensemble` model and sample data, and compare the results to what has previously been calculated.
-
+This will download the `sybil_ensemble` model and sample data, and compare the results to what has previously been calculated.
 
 ## Run the model
 
@@ -34,7 +33,7 @@ serie = Serie([dicom_path_1, dicom_path_2, ...], label=1)
 results = model.evaluate([serie])
 ```
 
-All model files are available on [GitHub releases](https://github.com/reginabarzilaygroup/Sybil/releases) as well as [here](https://drive.google.com/drive/folders/1nBp05VV9mf5CfEO6W5RY4ZpcpxmPDEeR?usp=sharing).
+All model files are available on [GitHub releases](https://github.com/reginabarzilaygroup/Sybil/releases) as well as on [Google Drive](https://drive.google.com/drive/folders/1nBp05VV9mf5CfEO6W5RY4ZpcpxmPDEeR?usp=sharing).
 
 ## Replicating results
 
@@ -44,92 +43,208 @@ You can replicate the results from our model using our training script:
 python train.py
 ```
 
-See our [documentation](docs/readme.md) for a full description of Sybil's training parameters. Additional information on the training process can be found on the [train](https://github.com/reginabarzilaygroup/Sybil/tree/train) branch of this repository.
+See our [documentation](docs/readme.md) for a full description of Sybil's training parameters. Additional information on the training process can be found on the [train branch](https://github.com/reginabarzilaygroup/Sybil/tree/train) of this repository.
 
+## Sybil-2
 
-# Sybil-2
-Sybil-2 is a new version of the Sybil model that can ingest multiple scans and performs nodule segmentation and tracking. 
+Sybil-2 is a new version of the Sybil model that can ingest multiple scans and performs nodule segmentation and tracking.
 
-## Environment 
+### Environment
 
 1. Create a new conda environment and install the dependencies from the `environment-v2.yaml` file.
 
-```
+```sh
 mamba env create -f environment-v2.yaml
 mamba activate sybil2
 ```
 
-2. Install the dependency on the Rad Vision Engine. This is a separate repository that contains the code for the nodule segmentation and tracking model.
-   
-  ```
-  git clone https://github.com/yalalab/rad-vision-engine ../rad-vision-engine
-  cd ../rad-vision-engine && git checkout release
-  cd ../pillar-finetune
-  pip install -e ../rad-vision-engine
-  ```
+1. Install the Rad Vision Engine dependency:
 
+```sh
+git clone https://github.com/yalalab/rad-vision-engine ../rad-vision-engine
+cd ../rad-vision-engine && git checkout release
+pip install -e ../rad-vision-engine
+```
 
-## Run the model
+### Run the model on a single exam
+
 ```python
 from sybil import Serie, Sybil2
 
-# Load a trained model
 model = Sybil2()
 
-# Get risk scores
-serie = Serie({
-  "first_exam": [dicom_path_1, dicom_path_2, ...],
-  "second_exam": [dicom_path_1, dicom_path_2, ...],
-  })
-scores = model.predict([serie])
+serie = Serie(
+    dicoms={
+        "baseline": [dicom_path_1, dicom_path_2, ...],
+        "followup": [dicom_path_1, dicom_path_2, ...],
+    },
+    version="v2",
+    cache_dir="/tmp/sybil_cache",
+)
+prediction = model.predict([serie])
+print(prediction.scores)   # [[year1_risk, year2_risk, ...]]
 ```
 
-## Replicating results
+### Batch inference from a CSV
 
+For large cohorts, use `SybilV2Dataset` together with `Sybil2.predict_dataset`.
 
+#### CSV format
 
+Each row is one CT scan (timepoint) for a patient. Multiple rows with the same
+`patient_id` are treated as a longitudinal series.
 
-# LDCT Orientation
+| column | required | description |
+| --- | --- | --- |
+| `patient_id` | ✓ | Unique patient identifier |
+| `timepoint` | ✓ | Scan identifier, e.g. `"baseline"`, `"year1"`, or an integer |
+| `ct_dir` | ✓ | Path to the directory containing the DICOM files for that scan |
+| `label` | | Cancer label (0 / 1) |
+| `censor_time` | | Years to cancer diagnosis (required when `label` is provided) |
+
+```csv
+patient_id,timepoint,ct_dir
+P001,baseline,/data/P001/scan_2018
+P001,followup,/data/P001/scan_2019
+P002,baseline,/data/P002/scan_2020
+```
+
+#### Single-GPU
+
+```python
+from sybil import Sybil2
+
+model = Sybil2()
+results = model.predict_dataset(
+    dataset="cohort.csv",
+    output_path="predictions.csv",
+    cache_dir="/tmp/sybil_cache",
+    batch_size=4,       # patients per batch
+    num_workers=4,      # DataLoader workers
+)
+# results is a list of dicts: patient_id, scores, year_1_risk, ...
+```
+
+#### Multi-GPU (single node)
+
+Create a launcher script, e.g. `run_inference.py`:
+
+```python
+import torch
+from sybil import Sybil2
+
+torch.distributed.init_process_group(backend="nccl")
+
+model = Sybil2()
+results = model.predict_dataset(
+    dataset="cohort.csv",
+    output_path="predictions.csv",   # written once by rank 0
+    cache_dir="/tmp/sybil_cache",
+    batch_size=4,
+    num_workers=4,
+    distributed=True,
+)
+
+torch.distributed.destroy_process_group()
+```
+
+Then launch with `torchrun`:
+
+```sh
+# 4 GPUs on one machine
+torchrun --standalone --nproc_per_node=4 run_inference.py
+```
+
+#### Multi-node
+
+```sh
+# 2 nodes, 4 GPUs each (8 GPUs total)
+# Run on node 0:
+torchrun --nnodes=2 --nproc_per_node=4 \
+         --node_rank=0 --master_addr=<node0_ip> --master_port=29500 \
+         run_inference.py
+
+# Run on node 1:
+torchrun --nnodes=2 --nproc_per_node=4 \
+         --node_rank=1 --master_addr=<node0_ip> --master_port=29500 \
+         run_inference.py
+```
+
+#### How batching works
+
+| Step | Scope | Parallelism |
+| --- | --- | --- |
+| DICOM → NIfTI + volume loading | per patient | DataLoader workers |
+| Lung mask + nodule segmentation (nnUNet) | per patient, per timepoint | Sequential on GPU (variable volume sizes) |
+| Confidence model (fixed 128×128×32 patches) | **all patients in batch** | Single batched forward pass |
+| CT registration (ANTs rigid) | per patient | `ThreadPoolExecutor` — parallel across patients |
+| Sybil2 risk forward | per patient | Sequential |
+| Patient assignment across GPUs | across GPUs | `DistributedSampler` |
+
+### Command-line interface
+
+The `sybil-predict` CLI supports two sub-commands.
+
+#### Single exam (Sybil v1)
+
+```sh
+sybil-predict single /path/to/dicoms --output-dir results/
+# with attention visualisation
+sybil-predict single /path/to/dicoms --output-dir results/ --write-attention-images
+```
+
+#### Batch cohort (Sybil2) via CLI
+
+```sh
+# Single GPU
+sybil-predict batch cohort.csv \
+    --output results/predictions.csv \
+    --cache-dir /tmp/sybil_cache
+
+# Multi-GPU (4 GPUs, one node)
+torchrun --standalone --nproc_per_node=4 \
+    -m sybil.predict batch cohort.csv \
+    --output results/predictions.csv \
+    --cache-dir /tmp/sybil_cache \
+    --distributed
+```
+
+Full option reference: `sybil-predict batch --help` / `sybil-predict single --help`.
+
+## LDCT Orientation
 
 The model expects the input to be an Axial LDCT, where the first frame is of the abdominal region and the last frame is along the clavicles.
 
-When the input is of the `dicom` type, the frames will be automatically sorted. However, for `png` inputs, the path of the PNG files must be in the right anatomical order. 
+When the input is of the `dicom` type, the frames will be automatically sorted. However, for `png` inputs, the path of the PNG files must be in the right anatomical order.
 
+## Annotations
 
-# Annotations
+To help train the model, two fellowship-trained thoracic radiologists jointly annotated suspicious lesions on NLST LDCTs using [MD.AI](https://md.ai) software for all participants who developed cancer within 1 year after an LDCT. Each lesion's volume was marked with bounding boxes on contiguous thin-cut axial images. The "ground truth" annotations were informed by the imaging appearance and the clinical data provided by the NLST, i.e., the series and image number of cancerous nodules and the anatomical location of biopsy-confirmed lung cancers. For these participants, lesions in the location of subsequently diagnosed cancers were also annotated, even if the precursor lesion lacked imaging features specific for cancer.
 
-To help train the model, two fellowship-trained thoracic radiologists jointly annotated suspicious lesions on NLST LDCTs using [MD.AI](https://md.ai) software for all participants who developed cancer within 1 year after an LDCT. Each lesion’s volume was marked with bounding boxes on contiguous thin-cut axial images. The “ground truth” annotations were informed by the imaging appearance and the clinical data provided by the NLST, i.e., the series and image number of cancerous nodules and the anatomical location of biopsy-confirmed lung cancers. For these participants, lesions in the location of subsequently diagnosed cancers were also annotated, even if the precursor lesion lacked imaging features specific for cancer. 
+Annotations are available to download in JSON format from [Google Drive](https://drive.google.com/file/d/19aa5yIHPWu3NtjqvXDc8NYB2Ub9V-4WM/view?usp=share_link). The JSON file is structured as below, where `(x,y)` refers to the top left corner of the bounding box, and all values are normalized to the image size (512,512).
 
-Annotations are availble to download in JSON format [here](https://drive.google.com/file/d/19aa5yIHPWu3NtjqvXDc8NYB2Ub9V-4WM/view?usp=share_link). The JSON file is structured as below, where `(x,y)` refers to the top left corner of the bounding box, and all values are normlized to the image size (512,512). 
-
-```
+```json
 {
-  series1_id: {   # Series Instance UID
-    image1_id: [  # SOP Instance UID / file name
-      {"x": x_axis_value, "y": y_axis_value, "height": bounding_box_heigh, "width": bounding_box_width}, # bounding box 1
-      {"x": x_axis_value, "y": y_axis_value, "height": bounding_box_heigh, "width": bounding_box_width}, # bounding box 2
-      ...
-      ],
-    image2_id: [],
-    ...
-  }
-  series2_id: {},
-  ...
+  "series1_id": {
+    "image1_id": [
+      {"x": 0.1, "y": 0.2, "height": 0.05, "width": 0.05},
+      {"x": 0.3, "y": 0.4, "height": 0.05, "width": 0.05}
+    ],
+    "image2_id": []
+  },
+  "series2_id": {}
 }
 ```
 
-# Attention Scores
+## Attention Scores
 
-The multi-attention pooling layer aims to learn the importance of each slice in the 3D volume and the importance of each pixel in the 2D slice. During training, these are supervised by bounding boxes of the cancerous nodules. This is a soft attention mechanism, and the model's primary task is to predict the risk of lung cancer. However, the attention scores can be extracted and used to visualize the model's focus on the 3D volume and the 2D slices. 
+The multi-attention pooling layer aims to learn the importance of each slice in the 3D volume and the importance of each pixel in the 2D slice. During training, these are supervised by bounding boxes of the cancerous nodules. This is a soft attention mechanism, and the model's primary task is to predict the risk of lung cancer. However, the attention scores can be extracted and used to visualize the model's focus on the 3D volume and the 2D slices.
 
-To extract the attention scores, you can use the  `return_attentions` argument as follows:
+To extract the attention scores, use the `return_attentions` argument:
 
 ```python
-
 results = model.predict([serie], return_attentions=True)
-
 attentions = results.attentions
-
 ```
 
 The `attentions` will be a list of length equal to the number of series. Each series has a dictionary with the following keys:
@@ -140,27 +255,25 @@ The `attentions` will be a list of length equal to the number of series. Each se
 To visualize the attention scores, you can use the following code. This will return a list of 2D images, where the attention scores are overlaid on the original images. If you provide a `save_directory`, the images will be saved as a GIF. If multiple series are provided, the function will return a list of lists, one for each series.
 
 ```python
-
 from sybil import visualize_attentions
 
 series_with_attention = visualize_attentions(
     series,
-    attentions = attentions,
-    save_directory = "path_to_save_directory",
-    gain = 3, 
+    attentions=attentions,
+    save_directory="path_to_save_directory",
+    gain=3,
 )
-
 ```
 
-# Training Data
+## Training Data
 
 The Sybil model was trained using the National Lung Screening Trial (NLST) dataset:
 
-National Lung Screening Trial Research Team. (2013). Data from the National Lung Screening Trial (NLST) [Data set]. The Cancer Imaging Archive. https://doi.org/10.7937/TCIA.HMQ8-J677
+National Lung Screening Trial Research Team. (2013). Data from the National Lung Screening Trial (NLST) [Data set]. The Cancer Imaging Archive. <https://doi.org/10.7937/TCIA.HMQ8-J677>
 
-# Cite
+## Cite
 
-```
+```bibtex
 @article{mikhael2023sybil,
   title={Sybil: a validated deep learning model to predict future lung cancer risk from a single low-dose chest computed tomography},
   author={Mikhael, Peter G and Wohlwend, Jeremy and Yala, Adam and Karstens, Ludvig and Xiang, Justin and Takigami, Angelo K and Bourgouin, Patrick P and Chan, PuiYee and Mrah, Sofiane and Amayri, Wael and Juan, Yu-Hsiang and Yang, Cheng-Ta and Wan, Yung-Liang and Lin, Gigin and Sequist, Lecia V and Fintelmann, Florian J. and Barzilay, Regina},
