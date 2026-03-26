@@ -1,13 +1,17 @@
 from argparse import Namespace
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
+import json
 import os
-from typing import NamedTuple, Union, Dict, List, Optional, Tuple
+import pandas as pd
+from typing import Any, NamedTuple, Union, Dict, List, Optional, Tuple
 from urllib.request import urlopen
 from zipfile import ZipFile
 import ants
 import cc3d
 import torch
 import pydicom
+import pickle
 import numpy as np
 
 import torch.nn.functional as F
@@ -529,7 +533,7 @@ class Sybil2:
         self.model = self.load_model(name_or_path[0])
 
         if calibrator_path is not None:
-            self.calibrator = SimpleClassifierGroup.from_json_grouped(calibrator_path)
+            self.calibrator = pickle.load(open(calibrator_path, 'rb'))
             logger.info(f"Loaded Sybil2 calibrator from {calibrator_path}")
         else:
             self.calibrator = None
@@ -909,4 +913,457 @@ class Sybil2:
         logger.info(f"Completed Sybil2 ensemble inference for {len(scores)} serie(s)")
 
         return Prediction(scores=calib_scores)
+
+    # ------------------------------------------------------------------
+    # Batched / distributed inference
+    # ------------------------------------------------------------------
+
+    @torch.inference_mode()
+    def _preprocess_batch(
+        self, series_list: List[Serie]
+    ) -> List[Optional[Dict[str, Any]]]:
+        """Batched version of ``_preprocess`` for multiple Series.
+
+        Runs identical per-sample processing to ``_preprocess`` but:
+
+        * Collects all nodule confidence patches across patients and runs the
+          confidence model in a **single forward pass**.
+        * Parallelises per-patient registration + nodule tracking with a
+          ``ThreadPoolExecutor`` (ANTs releases the GIL).
+
+        Parameters
+        ----------
+        series_list :
+            Patients to process.
+
+        Returns
+        -------
+        list of dict or None
+            One preprocessed input dict per patient (``None`` on failure).
+            Each dict has the same structure as the dict returned by
+            ``_preprocess``.
+        """
+        n = len(series_list)
+        # intermediate per-patient storage (None = failed)
+        inter: List[Optional[Dict[str, Any]]] = [None] * n
+
+        # flat list of confidence patches for batched inference
+        all_patches: List[torch.Tensor] = []
+        # (patient_idx, timepoint, n_patches_for_this_tp)
+        patch_map: List[Tuple[int, str, int]] = []
+
+        # --------------------------------------------------------------
+        # Phase 1: per-patient segmentation + connected components
+        # (variable volume sizes → sequential on GPU)
+        # --------------------------------------------------------------
+        for patient_idx, serie in enumerate(series_list):
+            try:
+                version2_inputs = serie.get_volume()
+            except Exception as exc:
+                logger.warning(
+                    f"get_volume failed for patient {patient_idx}: {exc}"
+                )
+                continue
+
+            x: List[torch.Tensor] = []
+            nodule_x: List[torch.Tensor] = []
+            tp_data: Dict[str, Dict] = {}
+
+            for timepoint in sorted(version2_inputs.keys()):
+                lungmask_volume = version2_inputs[timepoint].lungmask_volume
+                segmentation_volume = version2_inputs[timepoint].segmentation_volume
+                logger.debug(
+                    f"Batch patient {patient_idx} timepoint {timepoint}: segmenting"
+                )
+
+                lung_mask = self.lung_mask_model.apply(lungmask_volume)
+
+                seg_out = self.segmentation_model.predict(segmentation_volume)
+                seg_out = F.softmax(seg_out, 1)
+                nodule_seg = 1 * (seg_out[:, -1] > 0.5)
+
+                if isinstance(lung_mask, np.ndarray):
+                    lung_mask_t = torch.tensor(lung_mask > 0, dtype=torch.float32)
+                else:
+                    lung_mask_t = (lung_mask > 0).float()
+                lung_mask_t = F.interpolate(
+                    lung_mask_t, size=(1024, 1024), mode="nearest"
+                )
+                lung_mask_t = lung_mask_t.squeeze(1)
+                lung_mask_t = (lung_mask_t > 0).float()
+
+                combined_seg = (nodule_seg * lung_mask_t).float()
+                isegmentation, nnodules = cc3d.connected_components(
+                    combined_seg.numpy(), return_N=True
+                )
+                isegmentation = torch.from_numpy(isegmentation.astype(np.float32))
+                sparse_seg = isegmentation.to_sparse()
+
+                meta = serie._meta[timepoint]
+                volume_spacing = meta.voxel_spacing.prod().item()
+                tp_nodule_vols = (
+                    torch.bincount(sparse_seg.values().int())[1:]
+                    * volume_spacing
+                    / 4
+                )
+                tp_nodule_ids = torch.arange(1, nnodules + 1)
+
+                valid_mask = tp_nodule_vols >= 10
+                valid_ids = tp_nodule_ids[valid_mask]
+                valid_vols = tp_nodule_vols[valid_mask]
+                logger.debug(
+                    f"Patient {patient_idx} tp {timepoint}: "
+                    f"{nnodules} component(s), {len(valid_ids)} retained"
+                )
+
+                seg_vals = sparse_seg.values()
+                seg_idxs = sparse_seg.indices()
+                keep_mask = torch.isin(seg_vals, valid_ids)
+                sparse_seg = torch.sparse_coo_tensor(
+                    seg_idxs[:, keep_mask],
+                    seg_vals[keep_mask],
+                    sparse_seg.shape,
+                ).coalesce()
+
+                # collect confidence patches for batched inference in Phase 2
+                confidence_input = serie.prepare_for_confidence_model(
+                    sparse_seg, segmentation_volume, combined_seg
+                )
+                patch_map.append(
+                    (patient_idx, timepoint, confidence_input.shape[0])
+                )
+                all_patches.append(confidence_input)
+
+                malignancy_input = serie.prepare_for_malignancy_model(
+                    sparse_seg, segmentation_volume
+                )
+                x.append(segmentation_volume)
+                nodule_x.append(malignancy_input)
+                tp_data[timepoint] = {
+                    "sparse_seg": sparse_seg,
+                    "nodule_ids": valid_ids,
+                    "nodule_volumes": valid_vols,
+                    # "nodule_confidence" filled during Phase 2
+                }
+
+            inter[patient_idx] = {
+                "serie": serie,
+                "x": x,
+                "nodule_x": nodule_x,
+                "tp_data": tp_data,
+            }
+
+        # --------------------------------------------------------------
+        # Phase 2: batched confidence model inference
+        # (fixed 128×128×32 patches → stack across all patients)
+        # --------------------------------------------------------------
+        if all_patches:
+            batch_patches = torch.cat(all_patches, dim=0)
+            if self.device is not None:
+                batch_patches = batch_patches.to(self.device)
+            confidence_scores = (
+                self.confidence_model(batch_patches)["logit"].sigmoid().cpu()
+            )
+
+            offset = 0
+            for patient_idx, timepoint, n_patches in patch_map:
+                if inter[patient_idx] is None:
+                    offset += n_patches
+                    continue
+                inter[patient_idx]["tp_data"][timepoint][
+                    "nodule_confidence"
+                ] = confidence_scores[offset : offset + n_patches]
+                offset += n_patches
+
+        # --------------------------------------------------------------
+        # Phase 3: registration + nodule tracking + input assembly
+        # Parallelised across patients with threads (ANTs releases GIL).
+        # --------------------------------------------------------------
+        def _process_one(patient_idx: int) -> Optional[Dict[str, Any]]:
+            data = inter[patient_idx]
+            if data is None:
+                return None
+            serie = data["serie"]
+            tp_data = data["tp_data"]
+
+            # build tp2nodules (mirrors _preprocess exactly)
+            tp2nodules: Dict[str, List] = {}
+            for tp, tp_info in tp_data.items():
+                sparse_seg = tp_info["sparse_seg"]
+                nodule_list = []
+                for nid, vol in zip(
+                    tp_info["nodule_ids"], tp_info["nodule_volumes"]
+                ):
+                    mask = sparse_seg.values() == nid
+                    ys, xs, zs = sparse_seg.indices()[:, mask]
+                    ymin = ys.min().item() // 2
+                    ymax = ys.max().item() // 2
+                    xmin = xs.min().item() // 2
+                    xmax = xs.max().item() // 2
+                    zmin, zmax = zs.min().item(), zs.max().item()
+                    nodule_list.append(
+                        (
+                            nid.item(),
+                            {
+                                "volume": vol.item(),
+                                "nodid_in_segmentation": nid.item(),
+                                "coords": (ymin, ymax, xmin, xmax, zmin, zmax),
+                                "center": (
+                                    (ymin + ymax) // 2,
+                                    (xmin + xmax) // 2,
+                                    (zmin + zmax) // 2,
+                                ),
+                                "screen_detected": True,
+                            },
+                        )
+                    )
+                tp2nodules[tp] = nodule_list
+
+            if len(tp2nodules) > 1:
+                tp2nodules = self.register_exams(serie, tp2nodules)
+                tracked_nodules = link_nodules_by_center_distance(tp2nodules)
+                logger.info(
+                    f"Patient {patient_idx}: "
+                    f"{len(tracked_nodules)} longitudinal nodule trajectory(ies)"
+                )
+            else:
+                tp = list(tp2nodules.keys())[0]
+                tracked_nodules = {
+                    i + 1: {tp: meta}
+                    for i, (_, meta) in enumerate(tp2nodules[tp])
+                }
+
+            # assemble per-nodule lists (mirrors _preprocess exactly)
+            nodule_confidence: List = []
+            nodule_ids_tracked: List = []
+            nodule_tp_id: List = []
+            nodule_volumes: List = []
+            old_nodule_ids: List = []
+            has_prior: List = []
+            nodule_batch_id: List = []
+
+            for track_id, track in tracked_nodules.items():
+                tps_in_track = sorted(track.keys())
+                first_tp = tps_in_track[0]
+                for tp in tps_in_track:
+                    node_data = track[tp]
+                    tp_info = tp_data[tp]
+                    nid = node_data["nodid_in_segmentation"]
+                    nid_matches = (
+                        tp_info["nodule_ids"] == nid
+                    ).nonzero(as_tuple=True)[0]
+                    conf = (
+                        tp_info["nodule_confidence"][nid_matches[0]]
+                        if len(nid_matches) > 0
+                        else torch.tensor(0.0)
+                    )
+                    nodule_confidence.append(conf)
+                    nodule_ids_tracked.append(track_id)
+                    nodule_tp_id.append(tp)
+                    nodule_volumes.append(node_data["volume"])
+                    has_prior.append(tp != first_tp)
+                    old_nodule_ids.append(
+                        track.get(first_tp, {}).get("nodid_in_segmentation")
+                        if tp != first_tp
+                        else nid
+                    )
+                    nodule_batch_id.append(track_id)
+
+            return {
+                "x": data["x"],
+                "nodule_x": data["nodule_x"],
+                "nodule_confidence": nodule_confidence,
+                "nodule_ids": nodule_ids_tracked,
+                "nodule_tps": nodule_tp_id,
+                "nvolumes": nodule_volumes,
+                "old_nodule_ids": old_nodule_ids,
+                "has_prior": has_prior,
+                "nodule_batch_id": nodule_batch_id,
+            }
+
+        valid_indices = [i for i in range(n) if inter[i] is not None]
+        max_workers = min(4, max(1, len(valid_indices)))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            assembled = list(executor.map(_process_one, valid_indices))
+
+        results: List[Optional[Dict[str, Any]]] = [None] * n
+        for idx, result in zip(valid_indices, assembled):
+            results[idx] = result
+
+        return results
+
+    def predict_dataset(
+        self,
+        dataset: Union["SybilV2Dataset", str],  # noqa: F821
+        output_path: str,
+        cache_dir: Optional[str] = None,
+        batch_size: int = 4,
+        num_workers: int = 4,
+        distributed: bool = False,
+        file_type: str = "dicom",
+    ) -> List[Dict[str, Any]]:
+        """Run Sybil2 inference over a dataset, writing results to ``output_path``.
+
+        Can be used in three modes:
+
+        * **Single-GPU** – call directly, ``distributed=False`` (default).
+        * **Multi-GPU (single node)** – launch with ``torchrun`` and set
+          ``distributed=True``; results are gathered on rank 0 and written once.
+        * **Multi-node** – same as multi-GPU; ensure the distributed process
+          group is initialised before calling.
+
+        Parameters
+        ----------
+        dataset :
+            Either a :class:`~sybil.datasets.sybil_dataset.SybilV2Dataset`
+            instance or a path to a CSV manifest file.  The CSV must contain
+            columns ``patient_id``, ``timepoint``, ``ct_dir`` (and optionally
+            ``label`` / ``censor_time``).
+        output_path :
+            Destination file for predictions (rank 0 only).
+            ``.csv`` → CSV output; any other extension → JSON.
+        cache_dir :
+            Intermediate NIfTI cache directory.  Required when ``dataset``
+            is a CSV path.
+        batch_size :
+            Number of patients processed together in one ``_preprocess_batch``
+            call.  Confidence model patches from all patients in the batch are
+            batched into a single forward pass.
+        num_workers :
+            DataLoader worker processes for parallel CT loading.
+        distributed :
+            If ``True``, expects ``torch.distributed`` to be initialised.
+            Pins each rank to its local GPU, uses ``DistributedSampler`` to
+            split patients across ranks, gathers all results on rank 0, and
+            writes the output file exactly once.
+        file_type :
+            ``"dicom"`` or ``"png"`` (only used when ``dataset`` is a CSV path).
+
+        Returns
+        -------
+        list of dict
+            Per-patient result dicts with keys ``patient_id``, ``scores``, and
+            ``year_1_risk`` … ``year_N_risk``.
+            On non-zero ranks in distributed mode this list contains only the
+            patients processed by that rank; rank 0 returns the full gathered
+            list.
+        """
+        from sybil.datasets.sybil_dataset import SybilV2Dataset, collate_series
+
+        if isinstance(dataset, str):
+            if cache_dir is None:
+                raise ValueError(
+                    "cache_dir is required when dataset is a CSV path"
+                )
+            dataset = SybilV2Dataset(
+                dataset, cache_dir=cache_dir, file_type=file_type
+            )
+
+        # ------------------------------------------------------------------
+        # Device selection
+        # ------------------------------------------------------------------
+        if distributed:
+            # Pin each rank to its assigned local GPU.
+            local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            self.device = f"cuda:{local_rank}"
+            self.to(self.device)
+            rank = torch.distributed.get_rank()
+            world_size = torch.distributed.get_world_size()
+            logger.info(
+                f"Distributed inference: rank {rank}/{world_size} on {self.device}"
+            )
+        elif self._device_flexible:
+            self.device = self._pick_device()
+            self.to(self.device)
+
+        # ------------------------------------------------------------------
+        # DataLoader
+        # ------------------------------------------------------------------
+        sampler = (
+            torch.utils.data.distributed.DistributedSampler(
+                dataset, shuffle=False
+            )
+            if distributed
+            else None
+        )
+
+        loader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            sampler=sampler,
+            collate_fn=collate_series,
+        )
+
+        # ------------------------------------------------------------------
+        # Inference loop
+        # ------------------------------------------------------------------
+        local_results: List[Dict[str, Any]] = []
+
+        for batch in loader:
+            if batch is None:
+                continue
+            series_list, meta_list = batch
+
+            preprocessed = self._preprocess_batch(series_list)
+
+            for serie_inputs, meta in zip(preprocessed, meta_list):
+                if serie_inputs is None:
+                    logger.warning(
+                        f"Skipping patient {meta['patient_id']}: preprocessing failed"
+                    )
+                    continue
+
+                if self.device is not None:
+                    for key in serie_inputs:
+                        if isinstance(serie_inputs[key], torch.Tensor):
+                            serie_inputs[key] = serie_inputs[key].to(self.device)
+
+                serie_inputs["anatomy"] = ["chest_ct"] * len(serie_inputs["x"])
+                out = self.model(serie_inputs)
+                score = out["logit"].sigmoid().squeeze(0).cpu().numpy().tolist()
+                calib = self._calibrate([score]).tolist()
+
+                result: Dict[str, Any] = {
+                    "patient_id": meta["patient_id"],
+                    "scores": calib[0],
+                }
+                for i, s in enumerate(calib[0]):
+                    result[f"year_{i + 1}_risk"] = s
+                local_results.append(result)
+                logger.debug(f"Scored patient {meta['patient_id']}: {calib[0]}")
+
+        # ------------------------------------------------------------------
+        # Gather results across ranks (distributed mode only)
+        # ------------------------------------------------------------------
+        if distributed:
+            gathered: List[List[Dict[str, Any]]] = [
+                None  # type: ignore[list-item]
+            ] * torch.distributed.get_world_size()
+            torch.distributed.all_gather_object(gathered, local_results)
+            all_results: List[Dict[str, Any]] = [
+                r for rank_results in gathered for r in rank_results
+            ]
+        else:
+            all_results = local_results
+
+        # ------------------------------------------------------------------
+        # Write output (rank 0 only in distributed mode)
+        # ------------------------------------------------------------------
+        is_rank_zero = (not distributed) or (torch.distributed.get_rank() == 0)
+        if is_rank_zero:
+            os.makedirs(
+                os.path.dirname(os.path.abspath(output_path)), exist_ok=True
+            )
+            if output_path.endswith(".csv"):
+                pd.DataFrame(all_results).to_csv(output_path, index=False)
+            else:
+                with open(output_path, "w") as f:
+                    json.dump(all_results, f, indent=2)
+
+            logger.info(
+                f"Results for {len(all_results)} patient(s) written to {output_path}"
+            )
+
+        return all_results
 
