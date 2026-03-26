@@ -66,18 +66,19 @@ NAME_TO_FILE = {
             "64a91b25f84141d32852e75a3aec7305",
             "65fd1f04cb4c5847d86a9ed8ba31ac1a",
         ],
-        "google_checkpoint_id": [
-            "1ftYbav_BbUBkyR3HFCGnsp-h4uH1yhoz",
-            "1rscGi1grSxaVGzn-tqKtuAR3ipo0DWgA",
-            "1DV0Ge7n9r8WAvBXyoNRPwyA7VL43csAr",
-            "1Acz_yzdJMpkz3PRrjXy526CjAboMEIHX",
-            "1uV58SD-Qtb6xElTzWPDWWnloH1KB_zrP",
-        ],
-        "google_calibrator_id": "1FxHNo0HqXYyiUKE_k2bjatVt9e64J9Li",
     },
+    "sybil2": {
+        "checkpoint": [
+            "risk_e1a62cb9dc528486b0373b4ccecc5676",
+            "segmentation_5678b14bb8a563a32f448d19a7d12e6b",
+            "confidence_4296b4b6cda063e96d52aabfb0694a04",
+            "lungmask_unet_r231-d5d2fc3d",
+        ],
+    }
 }
 
 CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip")
+CHECKPOINT2_URL = os.getenv("SYBIL_CHECKPOINT2_URL", "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip")
 
 
 class Prediction(NamedTuple):
@@ -112,7 +113,7 @@ def download_sybil(name, cache) -> Tuple[List[str], str]:
 
     if not have_all_files:
         print(f"Downloading models to {cache}")
-        download_and_extract(CHECKPOINT_URL, cache)
+        download_and_extract(CHECKPOINT2_URL if name == 'sybil2' else CHECKPOINT_URL, cache)
 
     return download_model_paths, download_calib_path
 
@@ -489,6 +490,10 @@ class Sybil2:
 
         # Download if needed
         if isinstance(name_or_path, str) and (name_or_path in NAME_TO_FILE):
+            # 1. risk 
+            # 2. segmentation
+            # 3. confidence
+            # 4. lungmask
             name_or_path, calibrator_path = download_sybil(name_or_path, cache)
 
         elif not all(os.path.exists(p) for p in name_or_path):
@@ -514,15 +519,14 @@ class Sybil2:
         logger.info(f"Sybil2 using device={self.device} (flexible={self._device_flexible})")
 
         # Load model(s)
-        self.lung_mask_model = self.load_lungmask_model("/data/rbg/users/pgmikhael/current/lungmask/checkpoints/unet_r231-d5d2fc3d.pth")
+        logger.info(f"Loading Sybil2 models from: {'\n'.join(name_or_path)}")
+        self.lung_mask_model = self.load_lungmask_model(name_or_path[3])
 
-        self.segmentation_model = self.load_segmentation_model(name_or_path[0])
+        self.segmentation_model = self.load_segmentation_model(name_or_path[1])
         
-        self.confidence_model = self.load_confidence_model(name_or_path[0])
+        self.confidence_model = self.load_confidence_model(name_or_path[2])
 
-        self.model = self.load_model(name_or_path)
-        self.to(self.device)
-        logger.info(f"Loaded Sybil2 ensemble with {len(self.ensemble)} model(s)")
+        self.model = self.load_model(name_or_path[0])
 
         if calibrator_path is not None:
             self.calibrator = SimpleClassifierGroup.from_json_grouped(calibrator_path)
@@ -536,6 +540,8 @@ class Sybil2:
         checkpoint = torch.load(path, weights_only=False, map_location="cpu")
         model = Sybil17(checkpoint["args"]).load_state_dict(checkpoint["state_dict"]).eval()
         logger.debug("Initialized Sybil2 malignancy model")
+        if self.device is not None:
+            model.to(self.device)
         return model
     
     def load_lungmask_model(self, path):
