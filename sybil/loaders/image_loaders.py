@@ -6,6 +6,7 @@ import pydicom
 from pydicom.pixel_data_handlers.util import apply_modality_lut
 import numpy as np
 import nibabel as nib
+import torch.nn.functional as F
 
 LOADING_ERROR = "LOADING ERROR! {}"
 
