@@ -384,19 +384,14 @@ class Serie:
         Namespace
             args with preset values
         """
-        raise NotImplementedError("Version 2 is not yet implemented. Stay tuned!")
         args = Namespace(
             **{
                 "img_size": [256, 256],
-                "img_mean": [128.1722],
-                "img_std": [87.1849],
-                "num_images": 200,
                 "img_file_type": file_type,
-                "num_chan": 3,
                 "cache_path": None,
                 "use_annotations": False,
                 "fix_seed_for_multi_image_augmentations": True,
-                "slice_thickness_filter": 5,
+                "slice_thickness_filter": 3,
             }
         )
         return args
