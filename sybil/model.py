@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import json
 import os
+import sys
 import pandas as pd
 from typing import Any, NamedTuple, Union, Dict, List, Optional, Tuple
 from urllib.request import urlopen
@@ -21,7 +22,11 @@ from sybil.models.sybil2 import Sybil17
 from sybil.models.nnunet import nnUNet, nnUNetConfidence
 from sybil.models.calibrator import SimpleClassifierGroup
 from loguru import logger
-from sybil.utils.device_utils import get_default_device, get_most_free_gpu, get_device_mem_info
+from sybil.utils.device_utils import (
+    get_default_device,
+    get_most_free_gpu,
+    get_device_mem_info,
+)
 from sybil.utils.registration import (
     transform_index_to_physicalpoint,
     transform_physicalpoint_to_index,
@@ -29,6 +34,9 @@ from sybil.utils.registration import (
 )
 from sybil.utils.nodule_tracking import link_nodules_by_center_distance
 from lungmask import LMInferer
+
+logger.remove()  # remove the default handler
+logger.add(sys.stderr, level="INFO")
 
 # Leaving this here for a bit; these are IDs to download the models from Google Drive
 NAME_TO_FILE = {
@@ -72,17 +80,24 @@ NAME_TO_FILE = {
         ],
     },
     "sybil2": {
-        "checkpoint": [
-            "risk_e1a62cb9dc528486b0373b4ccecc5676",
-            "segmentation_5678b14bb8a563a32f448d19a7d12e6b",
-            "confidence_4296b4b6cda063e96d52aabfb0694a04",
-            "lungmask_unet_r231-d5d2fc3d",
-        ],
-    }
+        "checkpoint": {
+            "risk": "risk_e1a62cb9dc528486b0373b4ccecc5676",
+            "segmentation": "segmentation_5678b14bb8a563a32f448d19a7d12e6b",
+            "confidence": "confidence_4296b4b6cda063e96d52aabfb0694a04",
+            "malignancy": "malignancy_2d11891566dc6e03ca88f3f852bcd916",
+            "lungmask": "lungmask_unet_r231-d5d2fc3d",
+        }
+    },
 }
 
-CHECKPOINT_URL = os.getenv("SYBIL_CHECKPOINT_URL", "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip")
-CHECKPOINT2_URL = os.getenv("SYBIL_CHECKPOINT2_URL", "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip")
+CHECKPOINT_URL = os.getenv(
+    "SYBIL_CHECKPOINT_URL",
+    "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip",
+)
+CHECKPOINT2_URL = os.getenv(
+    "SYBIL_CHECKPOINT2_URL",
+    "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip",
+)
 
 
 class Prediction(NamedTuple):
@@ -95,6 +110,46 @@ class Evaluation(NamedTuple):
     c_index: float
     scores: List[List[float]]
     attentions: List[Dict[str, np.ndarray]] = None
+
+
+def download_sybil2(name, cache) -> Tuple[List[str], str]:
+    """Download trained models and calibrator"""
+    file_paths = {}
+    # Create cache folder if not exists
+    cache = os.path.expanduser(cache)
+    os.makedirs(cache, exist_ok=True)
+
+    # Download models
+    model_files = NAME_TO_FILE[name]
+    checkpoints = model_files["checkpoint"]
+    download_calib_path = os.path.join(cache, f"{name}_calibrator.pkl")
+    file_paths["calibrator"] = download_calib_path
+    have_all_files = os.path.exists(download_calib_path)
+
+    download_model_paths = []
+    for modelname, checkpoint in checkpoints.items():
+        cur_checkpoint_path = os.path.join(cache, f"{checkpoint}.ckpt")
+        have_all_files &= os.path.exists(cur_checkpoint_path)
+        file_paths[modelname] = cur_checkpoint_path
+        download_model_paths.append(cur_checkpoint_path)
+
+    pillar_path = os.path.join(cache, "pillar_seed0_epoch=2.ckpt")
+    if not os.path.exists(pillar_path):
+        logger.error(
+            f"""Expected pillar checkpoint not found at {pillar_path}. This is needed for Sybil2. 
+Please ensure you download it from `https://huggingface.co/YalaLab/Pillar0-Sybil-1.5`.
+Save as `pillar_seed0_epoch=2.ckpt` in the cache directory ({cache})."""
+        )
+        raise FileNotFoundError(
+            f"Expected pillar checkpoint not found at {pillar_path}"
+        )
+    have_all_files &= os.path.exists(pillar_path)
+
+    if not have_all_files:
+        print(f"Downloading models to {cache}")
+        download_and_extract(CHECKPOINT2_URL, cache)
+
+    return file_paths
 
 
 def download_sybil(name, cache) -> Tuple[List[str], str]:
@@ -117,7 +172,7 @@ def download_sybil(name, cache) -> Tuple[List[str], str]:
 
     if not have_all_files:
         print(f"Downloading models to {cache}")
-        download_and_extract(CHECKPOINT2_URL if name == 'sybil2' else CHECKPOINT_URL, cache)
+        download_and_extract(CHECKPOINT_URL, cache)
 
     return download_model_paths, download_calib_path
 
@@ -256,7 +311,9 @@ class Sybil:
         calibrated_scores = []
         for YEAR in range(scores.shape[1]):
             probs = scores[:, YEAR].reshape(-1, 1)
-            probs = self.calibrator["Year{}".format(YEAR + 1)].predict_proba(probs)[:, -1]
+            probs = self.calibrator["Year{}".format(YEAR + 1)].predict_proba(probs)[
+                :, -1
+            ]
             calibrated_scores.append(probs)
 
         return np.stack(calibrated_scores, axis=1)
@@ -312,16 +369,17 @@ class Sybil:
                             "volume_attention_1": out["volume_attention_1"]
                             .detach()
                             .cpu(),
-                            "hidden": out["hidden"]
-                            .detach()
-                            .cpu(),
+                            "hidden": out["hidden"].detach().cpu(),
                         }
                     )
 
         return Prediction(scores=scores, attentions=attentions)
 
     def predict(
-        self, series: Union[Serie, List[Serie]], return_attentions: bool = False, threads=0,
+        self,
+        series: Union[Serie, List[Serie]],
+        return_attentions: bool = False,
+        threads=0,
     ) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
 
@@ -370,9 +428,9 @@ class Sybil:
             for i in range(len(series)):
                 att = {}
                 for key in attention_keys:
-                    att[key] = np.stack([
-                        attentions_[j][i][key] for j in range(len(self.ensemble))
-                    ])
+                    att[key] = np.stack(
+                        [attentions_[j][i][key] for j in range(len(self.ensemble))]
+                    )
                 attentions.append(att)
 
         return Prediction(scores=calib_scores, attentions=attentions)
@@ -396,6 +454,7 @@ class Sybil:
 
         """
         from sybil.utils.metrics import get_survival_metrics
+
         if isinstance(series, Serie):
             series = [series]
         elif not isinstance(series, list):
@@ -425,7 +484,9 @@ class Sybil:
         auc = [float(out[f"{i + 1}_year_auc"]) for i in range(self._max_followup)]
         c_index = float(out["c_index"])
 
-        return Evaluation(auc=auc, c_index=c_index, scores=scores, attentions=predictions.attentions)
+        return Evaluation(
+            auc=auc, c_index=c_index, scores=scores, attentions=predictions.attentions
+        )
 
     def to(self, device: str):
         """Move model to device.
@@ -450,7 +511,9 @@ class Sybil:
             return get_default_device()
 
         # Get size of the model in memory (approximate)
-        model_mem = 9*sum(p.numel() * p.element_size() for p in self.ensemble.parameters())
+        model_mem = 9 * sum(
+            p.numel() * p.element_size() for p in self.ensemble.parameters()
+        )
 
         # Check memory available on current device.
         # If it seems like we're the only thing on this GPU, stay.
@@ -464,12 +527,10 @@ class Sybil:
             return get_most_free_gpu()
 
 
-class Sybil2: 
+class Sybil2:
     def __init__(
         self,
-        name_or_path: Union[List[str], str] = "sybil2",
         cache: str = "~/.sybil/",
-        calibrator_path: Optional[str] = None,
         device: Optional[str] = None,
     ):
         """Initialize a trained Sybil model for inference.
@@ -488,28 +549,12 @@ class Sybil2:
             By default, uses GPU with the most free memory, if available.
 
         """
-
+        model_name = "sybil2"
         self._cache = cache
         logger.info(f"Initializing Sybil2 with cache={cache}")
 
-        # Download if needed
-        if isinstance(name_or_path, str) and (name_or_path in NAME_TO_FILE):
-            # 1. risk 
-            # 2. segmentation
-            # 3. confidence
-            # 4. lungmask
-            name_or_path, calibrator_path = download_sybil(name_or_path, cache)
-
-        elif not all(os.path.exists(p) for p in name_or_path):
-            raise ValueError(
-                "No saved model or local path: {}".format(
-                    [p for p in name_or_path if not os.path.exists(p)]
-                )
-            )
-
-        # Check calibrator path before continuing
-        if (calibrator_path is not None) and (not os.path.exists(calibrator_path)):
-            raise ValueError(f"Path not found for calibrator {calibrator_path}")
+        model_paths = download_sybil2(model_name, cache)
+        calibrator_path = model_paths["calibrator"]
 
         # Set device.
         # If set manually, use it and stay there.
@@ -520,77 +565,93 @@ class Sybil2:
             self._device_flexible = False
         else:
             self.device = get_default_device()
-        logger.info(f"Sybil2 using device={self.device} (flexible={self._device_flexible})")
+        logger.info(
+            f"Sybil2 using device={self.device} (flexible={self._device_flexible})"
+        )
 
         # Load model(s)
-        logger.info(f"Loading Sybil2 models from: {'\n'.join(name_or_path)}")
-        self.lung_mask_model = self.load_lungmask_model(name_or_path[3])
+        logger.info(
+            "Loading Sybil2 models from:\n{}".format("\n".join(model_paths.values()))
+        )
+        self.lung_mask_model = self.load_lungmask_model(model_paths["lungmask"])
 
-        self.segmentation_model = self.load_segmentation_model(name_or_path[1])
-        
-        self.confidence_model = self.load_confidence_model(name_or_path[2])
+        self.segmentation_model = self.load_segmentation_model(
+            model_paths["segmentation"]
+        )
 
-        self.model = self.load_model(name_or_path[0])
+        self.confidence_model = self.load_confidence_model(model_paths["confidence"])
 
-        if calibrator_path is not None:
-            self.calibrator = pickle.load(open(calibrator_path, 'rb'))
-            logger.info(f"Loaded Sybil2 calibrator from {calibrator_path}")
-        else:
-            self.calibrator = None
-            logger.info("No Sybil2 calibrator provided; using raw ensemble predictions")
+        self.model = self.load_model(model_paths["risk"], model_paths["malignancy"])
 
-    def load_model(self, path):
+        self.calibrator = pickle.load(open(calibrator_path, "rb"))
+        logger.info(f"Loaded Sybil2 calibrator from {calibrator_path}")
+
+    def load_model(self, path, nodule_path):
         logger.debug(f"Loading Sybil2 malignancy model from {path}")
         checkpoint = torch.load(path, weights_only=False, map_location="cpu")
-        model = Sybil17(checkpoint["args"]).load_state_dict(checkpoint["state_dict"]).eval()
+        state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
+        args = checkpoint["hyper_parameters"]["args"]
+        args.nodule_classifier_ckpt = nodule_path
+        model = Sybil17(args)
+        model.load_state_dict(state_dict)
+        model.eval()
         logger.debug("Initialized Sybil2 malignancy model")
         if self.device is not None:
             model.to(self.device)
         return model
-    
+
     def load_lungmask_model(self, path):
-        # "/data/rbg/users/pgmikhael/current/lungmask/checkpoints/unet_r231-d5d2fc3d.pth"
         logger.info(f"Loading lung mask model from {path}")
         model = LMInferer(
             modelpath=path,
             tqdm_disable=True,
-            batch_size=100, # double check
-            force_cpu=True, # We force CPU here since the model is small and this avoids GPU memory issues when running with Sybil on the same GPU
+            batch_size=100,  # double check
+            force_cpu=True,  # We force CPU here since the model is small and this avoids GPU memory issues when running with Sybil on the same GPU
         )
         logger.info("Lung mask model initialized on CPU")
-        raise NotImplementedError("Lung segmentation is not yet implemented. Stay tuned!")
-    
+        return model
+
     def load_segmentation_model(self, path):
-        # /data/rbg/scratch/lung_ct/checkpoints/5678b14bb8a563a32f448d19a7d12e6b/last.ckpt
         logger.info(f"Loading nodule segmentation model from {path}")
         checkpoint = torch.load(path, weights_only=False, map_location="cpu")
-        args = checkpoint["args"]
-        model = nnUNet(args).load_state_dict(checkpoint["state_dict"]).eval()
+        args = checkpoint["hyper_parameters"]["args"]
+        state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
+        model = nnUNet(args)
+        model.load_state_dict(state_dict)
+        model.eval()
         if self.device is not None:
             model.to(self.device)
         logger.debug(f"Nodule segmentation model ready on device={self.device}")
         return model
-    
+
     def load_confidence_model(self, path):
-        # /data/rbg/scratch/lung_ct/checkpoints/4296b4b6cda063e96d52aabfb0694a04/4296b4b6cda063e96d52aabfb0694a04epoch=9.ckpt
         logger.info(f"Loading confidence model from {path}")
         checkpoint = torch.load(path, weights_only=False, map_location="cpu")
-        args = checkpoint["args"]
-        model = nnUNetConfidence(args).load_state_dict(checkpoint["state_dict"]).eval()
+        args = checkpoint["hyper_parameters"]["args"]
+        state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
+        model = nnUNetConfidence(args)
+        model.load_state_dict(state_dict)
+        model.eval()
         if self.device is not None:
             model.to(self.device)
         logger.debug(f"Confidence model ready on device={self.device}")
         return model
-    
-    def register_exams(self, serie: Serie, tp2nodules: Dict[str, Dict]) -> Dict[str, Dict]:
+
+    def register_exams(
+        self, serie: Serie, tp2nodules: Dict[str, Dict]
+    ) -> Dict[str, Dict]:
         volumes = serie.get_volume()
         timepoints = sorted(tp2nodules.keys())
-        logger.info(f"Registering {len(timepoints)} timepoint(s) for longitudinal tracking")
+        logger.info(
+            f"Registering {len(timepoints)} timepoint(s) for longitudinal tracking"
+        )
 
         for i in range(len(timepoints) - 1):
-            past_tp = timepoints[i]       # fixed (earlier exam)
+            past_tp = timepoints[i]  # fixed (earlier exam)
             current_tp = timepoints[i + 1]  # moving (later exam)
-            logger.debug(f"Registering moving timepoint {current_tp} to fixed timepoint {past_tp}")
+            logger.debug(
+                f"Registering moving timepoint {current_tp} to fixed timepoint {past_tp}"
+            )
 
             past_meta = serie._meta[past_tp]
             current_meta = serie._meta[current_tp]
@@ -598,8 +659,12 @@ class Sybil2:
             # read first two DICOM headers for image geometry (no pixel data)
             past_dcm0 = pydicom.dcmread(past_meta.paths[0], stop_before_pixels=True)
             past_dcm1 = pydicom.dcmread(past_meta.paths[1], stop_before_pixels=True)
-            current_dcm0 = pydicom.dcmread(current_meta.paths[0], stop_before_pixels=True)
-            current_dcm1 = pydicom.dcmread(current_meta.paths[1], stop_before_pixels=True)
+            current_dcm0 = pydicom.dcmread(
+                current_meta.paths[0], stop_before_pixels=True
+            )
+            current_dcm1 = pydicom.dcmread(
+                current_meta.paths[1], stop_before_pixels=True
+            )
 
             def _ants_from_dicom_geometry(vol_hwz, dcm0, dcm1):
                 """Build an ANTs image from a (H, W, D) numpy array with DICOM geometry."""
@@ -608,7 +673,8 @@ class Sybil2:
                 slice_dir = np.cross(row_dir, col_dir)
                 ps = list(map(float, dcm0.PixelSpacing))
                 slice_spacing = abs(
-                    float(dcm1.ImagePositionPatient[2]) - float(dcm0.ImagePositionPatient[2])
+                    float(dcm1.ImagePositionPatient[2])
+                    - float(dcm0.ImagePositionPatient[2])
                 )
                 origin = [float(x) for x in dcm0.ImagePositionPatient]
                 spacing = [ps[0], ps[1], slice_spacing]
@@ -621,11 +687,20 @@ class Sybil2:
                 )
 
             # build ANTs images from the already-loaded CT volumes
-            past_vol = volumes[past_tp].segmentation_volume.squeeze(0).permute(1, 2, 0).numpy()
-            current_vol = volumes[current_tp].segmentation_volume.squeeze(0).permute(1, 2, 0).numpy()
+            past_vol = (
+                volumes[past_tp].segmentation_volume.squeeze(0).permute(1, 2, 0).numpy()
+            )
+            current_vol = (
+                volumes[current_tp]
+                .segmentation_volume.squeeze(0)
+                .permute(1, 2, 0)
+                .numpy()
+            )
 
             past_ants = _ants_from_dicom_geometry(past_vol, past_dcm0, past_dcm1)
-            current_ants = _ants_from_dicom_geometry(current_vol, current_dcm0, current_dcm1)
+            current_ants = _ants_from_dicom_geometry(
+                current_vol, current_dcm0, current_dcm1
+            )
 
             # normalize and downsample for speed
             past_ants = ants.iMath(past_ants, "Normalize").astype("float32")
@@ -634,7 +709,9 @@ class Sybil2:
             current_ants = resize_xy_fast(current_ants, downsample_factor=4)
 
             # register: fixed=past (earlier), moving=current (later)
-            rigid = ants.registration(past_ants, current_ants, type_of_transform="Rigid")
+            rigid = ants.registration(
+                past_ants, current_ants, type_of_transform="Rigid"
+            )
 
             # point mapping is opposite to image mapping, so invert the forward transform
             reg_transform = ants.read_transform(rigid["fwdtransforms"][0])
@@ -665,10 +742,12 @@ class Sybil2:
                     os.remove(transform_file)
 
         return tp2nodules
-    
+
     @torch.inference_mode()
     def _preprocess(self, serie: Serie) -> Dict[str, torch.Tensor]:
-        version2_inputs = serie.get_volume()  # Dict timepoint -> InputV2(segmentation_volume, rve_volume, lungmask_volume)
+        version2_inputs = (
+            serie.get_volume()
+        )  # Dict timepoint -> InputV2(segmentation_volume, rve_volume, lungmask_volume)
         logger.debug(f"Preprocessing serie with {len(version2_inputs)} timepoint(s)")
         x = []
         nodule_x = []
@@ -693,7 +772,7 @@ class Sybil2:
             # step 2: compute nodule segmentation
             seg_out = self.segmentation_model.predict(segmentation_volume)
             seg_out = F.softmax(seg_out, 1)
-            nodule_seg = 1 * (seg_out[:, -1] > 0.5) # (D, H, W) nodule probability map
+            nodule_seg = 1 * (seg_out[:, -1] > 0.5)  # (D, H, W) nodule probability map
 
             # step 3: get connected components and sparsify
             if isinstance(lung_mask, np.ndarray):
@@ -706,13 +785,17 @@ class Sybil2:
             lung_mask_t = (lung_mask_t > 0).float()
 
             combined_seg = (nodule_seg * lung_mask_t).float()
-            isegmentation, nnodules = cc3d.connected_components(combined_seg.numpy(), return_N=True)
+            isegmentation, nnodules = cc3d.connected_components(
+                combined_seg.numpy(), return_N=True
+            )
             isegmentation = torch.from_numpy(isegmentation.astype(np.float32))
             sparse_seg = isegmentation.to_sparse()
 
             meta = serie._meta[timepoint]
             volume_spacing = meta.voxel_spacing.prod().item()
-            tp_nodule_vols = torch.bincount(sparse_seg.values().int())[1:] * volume_spacing / 4
+            tp_nodule_vols = (
+                torch.bincount(sparse_seg.values().int())[1:] * volume_spacing / 4
+            )
             tp_nodule_ids = torch.arange(1, nnodules + 1)
 
             # filter components by volume < 10mm^3
@@ -732,7 +815,9 @@ class Sybil2:
 
             # step 4: create input for confidence model
             # NOTE: reference_files/generate_predictions_for_confidence_model.py
-            confidence_input = serie.prepare_for_confidence_model(sparse_seg, segmentation_volume, combined_seg)
+            confidence_input = serie.prepare_for_confidence_model(
+                sparse_seg, segmentation_volume, combined_seg
+            )
 
             # step 5: compute confidence scores
             confidence_out = self.confidence_model(confidence_input)
@@ -741,7 +826,9 @@ class Sybil2:
             # step 6: create input for malignancy model
             # NOTE: generate_luna25_patches.py
             # NOTE: nlst_luna25 process_item() in reference_files/luna25.py
-            malignancy_input = serie.prepare_for_malignancy_model(sparse_seg, segmentation_volume)
+            malignancy_input = serie.prepare_for_malignancy_model(
+                sparse_seg, segmentation_volume
+            )
 
             x.append(segmentation_volume)
             nodule_x.append(malignancy_input)
@@ -764,13 +851,22 @@ class Sybil2:
                 ymin, ymax = ys.min().item() // 2, ys.max().item() // 2
                 xmin, xmax = xs.min().item() // 2, xs.max().item() // 2
                 zmin, zmax = zs.min().item(), zs.max().item()
-                nodule_list.append((nid.item(), {
-                    "volume": vol.item(),
-                    "nodid_in_segmentation": nid.item(),
-                    "coords": (ymin, ymax, xmin, xmax, zmin, zmax),
-                    "center": ((ymin + ymax) // 2, (xmin + xmax) // 2, (zmin + zmax) // 2),
-                    "screen_detected": True,
-                }))
+                nodule_list.append(
+                    (
+                        nid.item(),
+                        {
+                            "volume": vol.item(),
+                            "nodid_in_segmentation": nid.item(),
+                            "coords": (ymin, ymax, xmin, xmax, zmin, zmax),
+                            "center": (
+                                (ymin + ymax) // 2,
+                                (xmin + xmax) // 2,
+                                (zmin + zmax) // 2,
+                            ),
+                            "screen_detected": True,
+                        },
+                    )
+                )
             tp2nodules[tp] = nodule_list
 
         # if multiple timepoints
@@ -780,15 +876,18 @@ class Sybil2:
 
             # step 8: track nodules across timepoints using distance and assign nodule IDs
             tracked_nodules = link_nodules_by_center_distance(tp2nodules)
-            logger.info(f"Tracked {len(tracked_nodules)} longitudinal nodule trajectory(ies)")
+            logger.info(
+                f"Tracked {len(tracked_nodules)} longitudinal nodule trajectory(ies)"
+            )
         else:
             # single timepoint: assign sequential track IDs
             tp = list(tp2nodules.keys())[0]
             tracked_nodules = {
-                i + 1: {tp: meta}
-                for i, (_, meta) in enumerate(tp2nodules[tp])
+                i + 1: {tp: meta} for i, (_, meta) in enumerate(tp2nodules[tp])
             }
-            logger.info(f"Single timepoint detected; assigned {len(tracked_nodules)} track ID(s)")
+            logger.info(
+                f"Single timepoint detected; assigned {len(tracked_nodules)} track ID(s)"
+            )
 
         # assemble final per-nodule lists
         for track_id, track in tracked_nodules.items():
@@ -800,7 +899,11 @@ class Sybil2:
                 nid = node_data["nodid_in_segmentation"]
 
                 nid_matches = (tp_info["nodule_ids"] == nid).nonzero(as_tuple=True)[0]
-                conf = tp_info["nodule_confidence"][nid_matches[0]] if len(nid_matches) > 0 else torch.tensor(0.0)
+                conf = (
+                    tp_info["nodule_confidence"][nid_matches[0]]
+                    if len(nid_matches) > 0
+                    else torch.tensor(0.0)
+                )
 
                 nodule_confidence.append(conf)
                 nodule_ids_tracked.append(track_id)
@@ -808,7 +911,9 @@ class Sybil2:
                 nodule_volumes.append(node_data["volume"])
                 has_prior.append(tp != first_tp)
                 old_nodule_ids.append(
-                    track.get(first_tp, {}).get("nodid_in_segmentation") if tp != first_tp else nid
+                    track.get(first_tp, {}).get("nodid_in_segmentation")
+                    if tp != first_tp
+                    else nid
                 )
                 nodule_batch_id.append(track_id)
 
@@ -823,7 +928,7 @@ class Sybil2:
             "has_prior": has_prior,
             "nodule_batch_id": nodule_batch_id,
         }
-    
+
     @torch.inference_mode()
     def _predict(
         self,
@@ -834,11 +939,11 @@ class Sybil2:
 
         Parameters
         ----------
-        model: Sybil17  
+        model: Sybil17
             Instance of Sybil17
         series : Union[Serie, Iterable[Serie]]
             One or multiple series to run predictions for.
-        
+
         Returns
         -------
         Prediction
@@ -852,7 +957,7 @@ class Sybil2:
 
         scores: List[List[float]] = []
         logger.debug(f"Running Sybil2 prediction for {len(series)} serie(s)")
-        
+
         for serie in series:
             if not isinstance(serie, Serie):
                 raise ValueError("Expected a list of Serie objects.")
@@ -866,17 +971,20 @@ class Sybil2:
                 for key in version2_inputs:
                     if isinstance(version2_inputs[key], torch.Tensor):
                         version2_inputs[key] = version2_inputs[key].to(self.device)
-            
-            version2_inputs["anatomy"] = ["chest_ct"] * len(version2_inputs['x'])
+
+            version2_inputs["anatomy"] = ["chest_ct"] * len(version2_inputs["x"])
             out = model(version2_inputs)
             score = out["logit"].sigmoid().squeeze(0).cpu().numpy()
             scores.append(score.tolist())
             logger.debug("Computed Sybil2 risk score for one serie")
-            
+
         return Prediction(scores=scores)
 
     def predict(
-        self, series: Union[Serie, List[Serie]], return_attentions: bool = False, threads=0,
+        self,
+        series: Union[Serie, List[Serie]],
+        return_attentions: bool = False,
+        threads=0,
     ) -> Prediction:
         """Run predictions over the given serie(s) and ensemble
 
@@ -960,9 +1068,7 @@ class Sybil2:
             try:
                 version2_inputs = serie.get_volume()
             except Exception as exc:
-                logger.warning(
-                    f"get_volume failed for patient {patient_idx}: {exc}"
-                )
+                logger.warning(f"get_volume failed for patient {patient_idx}: {exc}")
                 continue
 
             x: List[torch.Tensor] = []
@@ -1002,9 +1108,7 @@ class Sybil2:
                 meta = serie._meta[timepoint]
                 volume_spacing = meta.voxel_spacing.prod().item()
                 tp_nodule_vols = (
-                    torch.bincount(sparse_seg.values().int())[1:]
-                    * volume_spacing
-                    / 4
+                    torch.bincount(sparse_seg.values().int())[1:] * volume_spacing / 4
                 )
                 tp_nodule_ids = torch.arange(1, nnodules + 1)
 
@@ -1029,9 +1133,7 @@ class Sybil2:
                 confidence_input = serie.prepare_for_confidence_model(
                     sparse_seg, segmentation_volume, combined_seg
                 )
-                patch_map.append(
-                    (patient_idx, timepoint, confidence_input.shape[0])
-                )
+                patch_map.append((patient_idx, timepoint, confidence_input.shape[0]))
                 all_patches.append(confidence_input)
 
                 malignancy_input = serie.prepare_for_malignancy_model(
@@ -1070,9 +1172,9 @@ class Sybil2:
                 if inter[patient_idx] is None:
                     offset += n_patches
                     continue
-                inter[patient_idx]["tp_data"][timepoint][
-                    "nodule_confidence"
-                ] = confidence_scores[offset : offset + n_patches]
+                inter[patient_idx]["tp_data"][timepoint]["nodule_confidence"] = (
+                    confidence_scores[offset : offset + n_patches]
+                )
                 offset += n_patches
 
         # --------------------------------------------------------------
@@ -1091,9 +1193,7 @@ class Sybil2:
             for tp, tp_info in tp_data.items():
                 sparse_seg = tp_info["sparse_seg"]
                 nodule_list = []
-                for nid, vol in zip(
-                    tp_info["nodule_ids"], tp_info["nodule_volumes"]
-                ):
+                for nid, vol in zip(tp_info["nodule_ids"], tp_info["nodule_volumes"]):
                     mask = sparse_seg.values() == nid
                     ys, xs, zs = sparse_seg.indices()[:, mask]
                     ymin = ys.min().item() // 2
@@ -1129,8 +1229,7 @@ class Sybil2:
             else:
                 tp = list(tp2nodules.keys())[0]
                 tracked_nodules = {
-                    i + 1: {tp: meta}
-                    for i, (_, meta) in enumerate(tp2nodules[tp])
+                    i + 1: {tp: meta} for i, (_, meta) in enumerate(tp2nodules[tp])
                 }
 
             # assemble per-nodule lists (mirrors _preprocess exactly)
@@ -1149,9 +1248,9 @@ class Sybil2:
                     node_data = track[tp]
                     tp_info = tp_data[tp]
                     nid = node_data["nodid_in_segmentation"]
-                    nid_matches = (
-                        tp_info["nodule_ids"] == nid
-                    ).nonzero(as_tuple=True)[0]
+                    nid_matches = (tp_info["nodule_ids"] == nid).nonzero(as_tuple=True)[
+                        0
+                    ]
                     conf = (
                         tp_info["nodule_confidence"][nid_matches[0]]
                         if len(nid_matches) > 0
@@ -1252,12 +1351,8 @@ class Sybil2:
 
         if isinstance(dataset, str):
             if cache_dir is None:
-                raise ValueError(
-                    "cache_dir is required when dataset is a CSV path"
-                )
-            dataset = SybilV2Dataset(
-                dataset, cache_dir=cache_dir, file_type=file_type
-            )
+                raise ValueError("cache_dir is required when dataset is a CSV path")
+            dataset = SybilV2Dataset(dataset, cache_dir=cache_dir, file_type=file_type)
 
         # ------------------------------------------------------------------
         # Device selection
@@ -1280,9 +1375,7 @@ class Sybil2:
         # DataLoader
         # ------------------------------------------------------------------
         sampler = (
-            torch.utils.data.distributed.DistributedSampler(
-                dataset, shuffle=False
-            )
+            torch.utils.data.distributed.DistributedSampler(dataset, shuffle=False)
             if distributed
             else None
         )
@@ -1352,9 +1445,7 @@ class Sybil2:
         # ------------------------------------------------------------------
         is_rank_zero = (not distributed) or (torch.distributed.get_rank() == 0)
         if is_rank_zero:
-            os.makedirs(
-                os.path.dirname(os.path.abspath(output_path)), exist_ok=True
-            )
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
             if output_path.endswith(".csv"):
                 pd.DataFrame(all_results).to_csv(output_path, index=False)
             else:
@@ -1366,4 +1457,3 @@ class Sybil2:
             )
 
         return all_results
-

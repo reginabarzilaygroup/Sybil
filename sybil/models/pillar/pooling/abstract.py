@@ -1,4 +1,4 @@
-from sybilx.models.pillar.abstract_model import AbstractModel
+from sybil.models.pillar.abstract_model import AbstractModel
 
 
 class AbstractPooling(AbstractModel):

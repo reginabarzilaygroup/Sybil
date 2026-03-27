@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 from .basic_pool_layers import GlobalMaxPool
-from sybilx.models.pillar.pooling.abstract import AbstractPooling
+from sybil.models.pillar.pooling.abstract import AbstractPooling
 
 
 class AttentivePooling(nn.Module):

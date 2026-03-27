@@ -6,11 +6,11 @@
 import torch
 import torch.nn as nn
 
-from sybilx.models.pillar.pooling.basic_pool_layers import (
+from sybil.models.pillar.pooling.basic_pool_layers import (
     GlobalMaxPool,
     SimpleAttentionPool,
 )
-from sybilx.models.pillar.pooling.abstract import AbstractPooling
+from sybil.models.pillar.pooling.abstract import AbstractPooling
 
 
 class PerFrameMaxPool(nn.Module):

@@ -26,7 +26,7 @@ from monai.inferers.utils import (
     _flatten_struct,
     _pack_struct,
 )
-from sybilx.utils.anatomix import PatchAugmentations
+from sybil.utils.augmentations import PatchAugmentations
 from tqdm import tqdm
 
 _nearest_mode = "nearest-exact"

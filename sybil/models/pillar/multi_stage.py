@@ -1,15 +1,15 @@
 from torch import nn
 from collections import OrderedDict
-from sybilx.models.pillar.heads.detr import DETR3D
-from sybilx.models.pillar.abstract_model import AbstractModel
-from sybilx.models.pillar.backbones.mmatlas import MultimodalAtlas
-from sybilx.models.pillar.heads.cumulative_hazard_layer import (
+from sybil.models.pillar.heads.detr import DETR3D
+from sybil.models.pillar.abstract_model import AbstractModel
+from sybil.models.pillar.backbones.mmatlas import MultimodalAtlas
+from sybil.models.pillar.heads.cumulative_hazard_layer import (
     CumulativeProbabilityLayer,
 )
-from sybilx.models.pillar.pooling.multi_attention_pool_layers import (
+from sybil.models.pillar.pooling.multi_attention_pool_layers import (
     MultiAttentionPool,
 )
-from sybilx.models.pillar.pooling.volume_attention_pool import VolumeAttentionPool
+from sybil.models.pillar.pooling.volume_attention_pool import VolumeAttentionPool
 
 models = {
     "MultimodalAtlas": MultimodalAtlas,

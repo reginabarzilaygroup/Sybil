@@ -2,10 +2,11 @@ import pickle
 import torch
 import torch.nn as nn
 from collections import OrderedDict
-from torch_scatter import  scatter_max
+from torch_scatter import scatter_max
 from sybil.models.pillar.multi_stage import BaseMultiStage
 from sybil.models.set_transformer import SetTransformer
 from sybil.models.segformer3d import SegFormer3DModel
+import loguru as logger
 
 
 class MultiStage(BaseMultiStage):
@@ -50,6 +51,7 @@ class MultiStage(BaseMultiStage):
     def stages(self):
         return self.backbone_model.visual.model_config["model"]["stages"]
 
+
 class DiffNet1(nn.Module):
     def __init__(self, args):
         super().__init__()
@@ -58,7 +60,7 @@ class DiffNet1(nn.Module):
         # project global features to diffnet model hidden dim - 6 (for logit)
         self.global_feature_proj = nn.Linear(1152, self.hidden_dim - 6)
         # project nodule features to diffnet model hidden dim - 3 (for malignancy score, volume, and segmentation confidence)
-        self.nodule_feature_proj = nn.Linear(512, self.hidden_dim - 3)  
+        self.nodule_feature_proj = nn.Linear(512, self.hidden_dim - 3)
         # nodule entity embedding
         self.entity_embedding = nn.Embedding(100, self.hidden_dim)
         # nodule timepoint embedding, continuous
@@ -136,33 +138,15 @@ class DiffNet1(nn.Module):
             "global_risk": global_risk,
         }
 
+
 class SegFormerClassifier(nn.Module):
     def __init__(self, args):
         super(SegFormerClassifier, self).__init__()
-        if args.module_snapshot is not None:
-            print(f"Loading segmentation model from {args.module_snapshot}")
-            model_dict = torch.load(
-                args.module_snapshot, weights_only=False, map_location="cpu"
-            )
-            model_args = model_dict["hyper_parameters"]["args"]
-            model = SegFormer3DModel(
-                in_channels=model_args.num_chan,
-                num_classes=model_args.num_classes,
-                decoder_dropout=model_args.dropout,
-            )
-            model.load_state_dict(
-                {
-                    k[len("model.model.") :]: v
-                    for k, v in model_dict["state_dict"].items()
-                }
-            )
-            self.model = model
-        else:
-            self.model = SegFormer3DModel(
-                in_channels=args.num_chan,
-                num_classes=args.num_classes,
-                decoder_dropout=args.dropout,
-            )
+        self.model = SegFormer3DModel(
+            in_channels=args.num_chan,
+            num_classes=args.num_classes,
+            decoder_dropout=args.dropout,
+        )
         del self.model.decoder
         self.classifier = nn.Linear(512, args.num_classes)
 
@@ -202,7 +186,8 @@ class SegFormerClassifier(nn.Module):
         pred = self.classifier(x)  # B, num_classes
         output = {"logit": pred, "features": x}
         return output
-    
+
+
 class Sybil17(nn.Module):
     def __init__(self, args):
         super().__init__()

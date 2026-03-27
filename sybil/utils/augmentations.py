@@ -321,7 +321,7 @@ class PatchAugmentations:
     def __init__(self, args, split="train"):
         self.split = "predict" if args.predict else split
         self.resample_pixel_spacing = args.resample_pixel_spacing
-        self.augment_before_cropping = args.augment_before_cropping
+        self.augment_before_cropping = getattr(args, "augment_before_cropping", False)
         self.train_transforms = self.get_train_transforms(args)
         self.val_transforms = self.get_val_transforms(args)
         self.test_transforms = self.get_test_transforms(args)
@@ -663,7 +663,7 @@ class PillarAugmentations:
     def __init__(self, args, split="train"):
         self.split = "predict" if args.predict else split
         self.resample_pixel_spacing = args.resample_pixel_spacing
-        self.augment_before_cropping = args.augment_before_cropping
+        self.augment_before_cropping = getattr(args, "augment_before_cropping", False)
         self.train_transforms = self.get_train_transforms(args)
         self.val_transforms = self.get_val_transforms(args)
         self.test_transforms = self.get_test_transforms(args)

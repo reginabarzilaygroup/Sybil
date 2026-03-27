@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from sybilx.models.pillar.pooling.abstract import AbstractPooling
+from sybil.models.pillar.pooling.abstract import AbstractPooling
 
 
 class GlobalMaxPool(AbstractPooling):

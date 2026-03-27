@@ -1,4 +1,5 @@
 import os
+
 # CRITICAL: Must be set BEFORE importing ants or itk
 os.environ["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = "1"
 os.environ["NSLOTS"] = "1"
@@ -167,13 +168,14 @@ def save_registration_transformation(fixed_path, moving_path, transform_path):
         moving = resize_xy_fast(moving, downsample_factor=4)
 
         rigid = ants.registration(fixed, moving, type_of_transform="Rigid")
-        assert rigid["fwdtransforms"][0] == rigid["invtransforms"][0]:
+        assert rigid["fwdtransforms"][0] == rigid["invtransforms"][0], (
+            "Expected symmetric rigid transform"
+        )
         shutil.move(
             rigid["fwdtransforms"][0],
             transform_path,
         )
-       
+
     except Exception as e:
         print(f"Could not register {fixed_path} to {moving_path}. Message: {e}")
         return e
-

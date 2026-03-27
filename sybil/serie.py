@@ -13,7 +13,8 @@ from loguru import logger
 from sybil.datasets.utils import order_slices, VOXEL_SPACING
 from sybil.utils.loading import get_sample_loader
 from sybil.utils.dicom_to_nifti import pydicom_to_nifti
-        
+
+
 def _pad_axis(lo: int, hi: int, min_size: int, max_size: int):
     """Symmetrically expand [lo, hi+1) to at least min_size, clamped to [0, max_size]."""
     size = hi - lo + 1
@@ -40,10 +41,12 @@ class Label(NamedTuple):
     y_mask: np.ndarray
     censor_time: int
 
+
 class InputV2(NamedTuple):
     segmentation_volume: torch.Tensor
     rve_volume: Optional[torch.Tensor] = None
     lungmask_volume: Optional[torch.Tensor] = None
+
 
 class Serie:
     def __init__(
@@ -56,7 +59,6 @@ class Serie:
         split: Literal["train", "dev", "test"] = "test",
         version: Literal["v1", "v2"] = "v1",
         cache_dir: Optional[str] = None,
-
     ):
         """Initialize a Serie.
 
@@ -91,15 +93,19 @@ class Serie:
             raise ValueError("censor_time should also provided with label.")
         if file_type == "png" and voxel_spacing is None:
             raise ValueError("voxel_spacing should be provided for PNG files.")
-        
+
         self._is_version1 = version == "v1"
         self._is_version2 = version == "v2"
         if self._is_version1 and isinstance(dicoms, dict) and len(dicoms) > 1:
-            raise ValueError("Multiple dicom dicts provided for version 1. Expected a single dict or a list of paths.")
+            raise ValueError(
+                "Multiple dicom dicts provided for version 1. Expected a single dict or a list of paths."
+            )
 
         if self._is_version2:
-            assert cache_dir is not None, "Version 2 requires a cache directory for storing intermediate NIfTI files."
-        
+            assert cache_dir is not None, (
+                "Version 2 requires a cache directory for storing intermediate NIfTI files."
+            )
+
         self._cache_dir = cache_dir
 
         if self._is_version1 and isinstance(dicoms, dict):
@@ -107,7 +113,7 @@ class Serie:
 
         self._censor_time = censor_time
         self._label = label
-        if self._is_version1: 
+        if self._is_version1:
             args = self._load_argsv1(file_type)
             self._args = args
             self._meta = self._load_metadata(dicoms, voxel_spacing, file_type)
@@ -119,14 +125,17 @@ class Serie:
         elif self._is_version2:
             args = self._load_argsv2(file_type)
             self._args = args
-            self._meta = {k: self._load_metadata(dcms, voxel_spacing, file_type)  for k, dcms in dicoms.items()}
-        
+            self._meta = {
+                k: self._load_metadata(dcms, voxel_spacing, file_type)
+                for k, dcms in dicoms.items()
+            }
+
         self._loader = get_sample_loader(split, args, version=version)
 
-    def _convert_dicom_dicts_to_paths(
-        self, dicoms: Dict[str, List[str]]
-    ) -> List[str]:
-        assert len(dicoms) == 1, "Expected only one dicom dict when multi_scan is False."
+    def _convert_dicom_dicts_to_paths(self, dicoms: Dict[str, List[str]]) -> List[str]:
+        assert len(dicoms) == 1, (
+            "Expected only one dicom dict when multi_scan is False."
+        )
         key = list(dicoms.keys())[0]
         return dicoms[key]
 
@@ -193,7 +202,7 @@ class Serie:
         images = [i["input"] for i in input_dicts]
         return images
 
-    @functools.lru_cache    
+    @functools.lru_cache
     def get_volume(self) -> Union[torch.Tensor, Dict[str, InputV2]]:
         if self._is_version1:
             return self._get_volume_v1()
@@ -201,33 +210,41 @@ class Serie:
             return self._get_volume_v2()
         else:
             raise ValueError("Invalid version. Expected 'v1' or 'v2'.")
-    
+
     def _get_volume_v2(self):
         volumes = {}
         for key, meta in self._meta.items():
-            # rve sample 
-            nifti_volume = pydicom_to_nifti(meta.paths, meta.nifti_path, return_nifti=False, save_nifti=True)
+            # rve sample
+            nifti_volume = pydicom_to_nifti(
+                meta.paths, meta.nifti_path, return_nifti=False, save_nifti=True
+            )
             logger.debug(f"Saved NIfTI for {key} at {meta.nifti_path}")
             rve_volume = self._get_volume_for_rve(meta.nifti_path)
-            lungmask_volume, segmentation_volume = self._get_volume_for_segmentation(nifti_volume)
+            lungmask_volume, segmentation_volume = self._get_volume_for_segmentation(
+                nifti_volume
+            )
             volumes[key] = InputV2(
-                lungmask_volume=lungmask_volume, # shared with confidence model
-                segmentation_volume=segmentation_volume, # shared with confidence model
+                lungmask_volume=lungmask_volume,  # shared with confidence model
+                segmentation_volume=segmentation_volume,  # shared with confidence model
                 rve_volume=rve_volume,
             )
         return volumes
 
     def _get_volume_for_rve(self, nifti_path: str) -> Optional[torch.Tensor]:
         # NOTE: consider passing volume instead to avoid redundant loading
-        volume = self._loader['pillar'].load_input(nifti_path)["input"]
+        volume = self._loader["pillar"].load_input(nifti_path)["input"]
         # delete nifti_file after loading to save space
         if self._cache_dir is not None and os.path.exists(nifti_path):
             os.remove(nifti_path)
-            logger.debug(f"Deleted cached NIfTI at {nifti_path} after loading RVE volume.")
+            logger.debug(
+                f"Deleted cached NIfTI at {nifti_path} after loading RVE volume."
+            )
         return volume
-    
-    def _get_volume_for_segmentation(self, image: np.ndarray) -> List[torch.Tensor, torch.Tensor]:
-        image = self._loader['nifti'].load_input(image)["input"]
+
+    def _get_volume_for_segmentation(
+        self, image: np.ndarray
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        image = self._loader["nifti"].load_input(image)["input"]
         affine = torch.diag(self._meta.voxel_spacing)
         image = MetaTensor(
             image,
@@ -263,9 +280,7 @@ class Serie:
         torch.Tensor
             CT volume of shape (1, C, N, H, W)
         """
-        input_dicts = [
-            self._loader.get_image(path) for path in self._meta.paths
-        ]
+        input_dicts = [self._loader.get_image(path) for path in self._meta.paths]
 
         x = torch.cat([i["input"].unsqueeze(0) for i in input_dicts], dim=0)
 
@@ -325,9 +340,13 @@ class Serie:
             voxel_spacing = (
                 torch.tensor(voxel_spacing + [1]) if voxel_spacing is not None else None
             )
-        
-        identifier = paths[0].split("/")[-2] # folder name
-        nifti_path = os.path.join(self._cache_dir, f"{identifier}.nii.gz") if self._cache_dir is not None else None
+
+        identifier = paths[0].split("/")[-2]  # folder name
+        nifti_path = (
+            os.path.join(self._cache_dir, f"{identifier}.nii.gz")
+            if self._cache_dir is not None
+            else None
+        )
 
         meta = Meta(
             paths=processed_paths,
@@ -474,9 +493,9 @@ class Serie:
 
             # place nodule probability into a zero canvas, then crop
             patch_seg = torch.zeros(img_h, img_w, img_d, dtype=nodule_mask.dtype)
-            patch_seg[ymin:ymax + 1, xmin:xmax + 1, zmin:zmax + 1] = (
-                nodule_mask[zmin:zmax + 1, ymin:ymax + 1, xmin:xmax + 1].permute(1, 2, 0)
-            )
+            patch_seg[ymin : ymax + 1, xmin : xmax + 1, zmin : zmax + 1] = nodule_mask[
+                zmin : zmax + 1, ymin : ymax + 1, xmin : xmax + 1
+            ].permute(1, 2, 0)
             patchl = patch_seg[y1:y2, x1:x2, z1:z2]
 
             patches.append(torch.stack([patchx, patchl]))  # (2, H_crop, W_crop, D_crop)
@@ -536,7 +555,9 @@ class Serie:
             zmin = max(0, zcenter - D_CROP // 2)
             zmax = min(img_d, zmin + D_CROP)
 
-            patches.append(image[ymin:ymax, xmin:xmax, zmin:zmax])  # (H_crop, W_crop, D_crop)
+            patches.append(
+                image[ymin:ymax, xmin:xmax, zmin:zmax]
+            )  # (H_crop, W_crop, D_crop)
 
         if patches:
             return torch.stack(patches)  # (N, H_crop, W_crop, D_crop)

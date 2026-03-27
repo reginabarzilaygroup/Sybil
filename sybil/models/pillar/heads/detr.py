@@ -9,9 +9,9 @@ import torch
 
 from torch import nn
 
-from sybilx.models.pillar.pos_embed import gen_3d_sincos_pos_embed
-from sybilx.models.pillar.heads.basic import MLP
-from sybilx.models.pillar.abstract_model import AbstractModel
+from sybil.models.pillar.pos_embed import gen_3d_sincos_pos_embed
+from sybil.models.pillar.heads.basic import MLP
+from sybil.models.pillar.abstract_model import AbstractModel
 
 
 class DETR3D(AbstractModel):

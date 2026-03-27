@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
-from sybilx.models.pillar.abstract_model import AbstractModel
+from sybil.models.pillar.abstract_model import AbstractModel
 
 
 class Linear(AbstractModel):
