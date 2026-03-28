@@ -193,16 +193,14 @@ class Sybil17(nn.Module):
         super().__init__()
         self.args = args
         self.precomputed_pillar_hiddens = args.precomputed_pillar_hiddens
-        if not self.precomputed_pillar_hiddens:
-            self._load_pillar_model(args)
+        # self._load_pillar_model(args)
         self._load_nodule_model(args, args.nodule_classifier_ckpt)
         self._load_diff_net(args, args.diffnet_ckpt)
 
     def _load_pillar_model(self, args):
         self.pillar_model = MultiStage(args)
-        seed = getattr(args, "pillar_seed", "seed0")
         checkpoint = torch.load(
-            f"/data/rbg/users/pgmikhael/mammogram/yala/pillar-finetune-refactored/logs/checkpoints/{seed}/epoch=2.ckpt",
+            args.pillar_ckpt,
             map_location="cpu",
             weights_only=False,
         )
@@ -236,10 +234,7 @@ class Sybil17(nn.Module):
             self.diff_net.load_state_dict(diff_net_ckpt["state_dict"])
 
     def forward(self, x, batch=None, split="train"):
-        if x.shape[0] == 1:
-            output = self.forward_single_batch(x, batch, split=split)
-        else:
-            output = self.forward_multi_batch(x, batch, split=split)
+        output = self.forward_multi_batch(x, batch, split=split)
         return output
 
     def forward_multi_batch(self, x, batch=None, split="train"):
@@ -262,75 +257,14 @@ class Sybil17(nn.Module):
         # diff net
         diff_output = self.diffnet_forward(pillar_output, nodule_output, batch=batch)
 
-        # merge outputs
-        nodule_label = (
-            (batch["nodule_luna25_labels"] + batch["nodule_cancer_labels"]) > 0
-        ).float()
-        nodule_has_label = (
-            batch["nodule_has_luna25_labels"] + batch["nodule_has_cancer_labels"]
-        ) > 0
-        nodule_label[nodule_has_label == 0] = -100
         # reshape
         diff_output["nodule_risks"] = diff_output["nodule_risks"].view(-1, 1)
 
-        if self.args.diffnet == "diffnet2":
-            nodule_has_label = scatter_max(
-                nodule_has_label.float(), batch["nodule_ids_tracked"], dim=1
-            )[0]
-            nodule_label = scatter_max(
-                nodule_label.float(), batch["nodule_ids_tracked"], dim=1
-            )[0]
-
-        nodule_label = nodule_label.view(-1, 1)
-        nodule_has_label = nodule_has_label.view(-1, 1)
-
         output = {
             "logit": diff_output["logit"],
-            # or use nodule_output["logit"]
             "nodule_risks": diff_output["nodule_risks"],
             "global_risk": diff_output["global_risk"],
             "batch_ids": batch["nodule_batch_id"][0],
-            "nodule_label": nodule_label,
-        }
-        return output
-
-    def forward_single_batch(self, x, batch=None, split="train"):
-        output = {}
-        # Pass through backbone and get features
-        assert x.shape[0] == 1, "For memory, using single batch"
-        if self.precomputed_pillar_hiddens:
-            pillar_output = {
-                "pillar_features": x,
-                "pillar_risk": batch["logit"],
-            }
-        else:
-            if x.dim() == 6:
-                x = x[0]
-            pillar_output = self.pillar_forward(x, batch)
-
-        # get nodule features
-        nodule_x = batch["nodule_x"][0].unsqueeze(1)
-        nodule_output = self.nodule_forward(nodule_x)
-
-        # diff net
-        diff_output = self.diffnet_forward(pillar_output, nodule_output, batch=batch)
-
-        # merge outputs
-        nodule_label = (
-            (batch["nodule_luna25_labels"] + batch["nodule_cancer_labels"]) > 0
-        ).float()
-        nodule_has_label = (
-            batch["nodule_has_luna25_labels"] + batch["nodule_has_cancer_labels"]
-        ) > 0
-        nodule_label[nodule_has_label == 0] = -100
-
-        output = {
-            "logit": diff_output["logit"],
-            # or use nodule_output["logit"]
-            "nodule_risks": diff_output["nodule_risks"],
-            "global_risk": diff_output["global_risk"],
-            "batch_ids": batch["nodule_batch_id"][0],
-            "nodule_label": nodule_label,
         }
         return output
 
@@ -367,6 +301,6 @@ class Sybil17(nn.Module):
         logit = self.pillar_model.head_models["survival"](dropout_outputs)
         output = {
             "pillar_risk": logit,
-            "pillar_features": dropout_outputs,
+            "pillar_features": pooled_outputs["hidden"],
         }
         return output

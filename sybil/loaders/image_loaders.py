@@ -7,7 +7,7 @@ from pydicom.pixel_data_handlers.util import apply_modality_lut
 import numpy as np
 import nibabel as nib
 import torch.nn.functional as F
-
+from sybil.loaders.rve import  NiftiToRVE
 LOADING_ERROR = "LOADING ERROR! {}"
 
 def apply_windowing(image, center, width, bit_size=16, use_tensor=False):
@@ -168,6 +168,7 @@ class NiftiLoader(abstract_loader):
 class PillarLoader(abstract_loader):
     def __init__(self, cache_path, augmentations, args, apply_augmentations=True):
         super(PillarLoader, self).__init__(cache_path, augmentations, args, apply_augmentations)
+        self.rve_processor = NiftiToRVE()
         self.anatomical_windows = {
             "CT": {
                 "lung": {"center": -600, "width": 1500},
@@ -185,7 +186,7 @@ class PillarLoader(abstract_loader):
 
     def load_input(self, path):
         try:
-            image = rve.load_nifti(path, use_hardware_acceleration=False)[None]
+            image = rve.load_sample(path, use_hardware_acceleration=False)[None]
             image = self._pad_along_depth(image, 256)
             image = self.process_image_for_pillar(image)
         except Exception:

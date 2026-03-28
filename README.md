@@ -66,6 +66,13 @@ cd ../rad-vision-engine && git checkout release
 pip install -e ../rad-vision-engine
 ```
 
+2. Download the Pillar model checkpoint from [YalaLab/Pillar0-Sybil-1.5](https://huggingface.co/YalaLab/Pillar0-Sybil-1.5) and save it as `pillar_seed0_epoch=2.ckpt` in the Sybil cache directory (default: `~/.sybil/`):
+
+```sh
+# example using huggingface-hub
+huggingface-cli download YalaLab/Pillar0-Sybil-1.5 pillar_seed0_epoch=2.ckpt --local-dir ~/.sybil/
+```
+
 ### Run the model on a single exam
 
 ```python

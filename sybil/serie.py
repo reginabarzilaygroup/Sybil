@@ -1,18 +1,20 @@
 import functools
 import os
+import shutil
 from typing import Any, Dict, List, Optional, NamedTuple, Literal, Union, Tuple
 from argparse import Namespace
 import cc3d
 import torch
 import numpy as np
 import pydicom
+import SimpleITK as sitk
 import torchio as tio
 import torch.nn.functional as F
 from monai.data import MetaTensor
 from loguru import logger
 from sybil.datasets.utils import order_slices, VOXEL_SPACING
 from sybil.utils.loading import get_sample_loader
-from sybil.utils.dicom_to_nifti import pydicom_to_nifti
+from sybil.utils.dicom_to_nifti import read_with_sitk
 
 
 def _pad_axis(lo: int, hi: int, min_size: int, max_size: int):
@@ -33,6 +35,7 @@ class Meta(NamedTuple):
     slice_positions: list
     voxel_spacing: torch.Tensor
     nifti_path: Optional[str] = None
+    identifier: Optional[str] = None
 
 
 class Label(NamedTuple):
@@ -51,7 +54,7 @@ class InputV2(NamedTuple):
 class Serie:
     def __init__(
         self,
-        dicoms: Union[List[str], Dict[str, List[str]]],
+        dicoms: Union[List[str], Dict[int, List[str]]],
         voxel_spacing: Optional[List[float]] = None,
         label: Optional[int] = None,
         censor_time: Optional[int] = None,
@@ -215,13 +218,13 @@ class Serie:
         volumes = {}
         for key, meta in self._meta.items():
             # rve sample
-            nifti_volume = pydicom_to_nifti(
-                meta.paths, meta.nifti_path, return_nifti=False, save_nifti=True
+            nifti_volume, sitk_volume = read_with_sitk(
+                meta.paths, depth_first=True
             )
-            logger.debug(f"Saved NIfTI for {key} at {meta.nifti_path}")
-            rve_volume = self._get_volume_for_rve(meta.nifti_path)
+            # logger.debug(f"Saved NIfTI for {key} at {meta.nifti_path}")
+            rve_volume = self._get_volume_for_rve(sitk_volume, "{}_{}".format(meta.identifier, key))
             lungmask_volume, segmentation_volume = self._get_volume_for_segmentation(
-                nifti_volume
+                nifti_volume, meta
             )
             volumes[key] = InputV2(
                 lungmask_volume=lungmask_volume,  # shared with confidence model
@@ -230,44 +233,50 @@ class Serie:
             )
         return volumes
 
-    def _get_volume_for_rve(self, nifti_path: str) -> Optional[torch.Tensor]:
-        # NOTE: consider passing volume instead to avoid redundant loading
-        volume = self._loader["pillar"].load_input(nifti_path)["input"]
+    def _get_volume_for_rve(self, sitk_volume: sitk.Image, accession: str) -> Optional[torch.Tensor]:
+        rve_path = self._loader["pillar"].rve_processor(sitk_volume, output_dir=self._cache_dir, accession=accession, series_number=1)
+        volume = self._loader["pillar"].load_input(rve_path)["input"]
         # delete nifti_file after loading to save space
-        if self._cache_dir is not None and os.path.exists(nifti_path):
-            os.remove(nifti_path)
-            logger.debug(
-                f"Deleted cached NIfTI at {nifti_path} after loading RVE volume."
-            )
+        if self._cache_dir is not None and os.path.exists(rve_path):
+            if os.path.isdir(rve_path):
+                shutil.rmtree(rve_path)
+                logger.debug(
+                    f"Deleted cached directory at {rve_path} after loading RVE volume."
+                )
+            else:
+                os.remove(rve_path)
+                logger.debug(
+                    f"Deleted cached file at {rve_path} after loading RVE volume."
+                )
         return volume
 
     def _get_volume_for_segmentation(
-        self, image: np.ndarray
+        self, image: np.ndarray, meta
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         image = self._loader["nifti"].load_input(image)["input"]
-        affine = torch.diag(self._meta.voxel_spacing)
+        affine = torch.diag(meta.voxel_spacing)
         image = MetaTensor(
             image,
             affine=affine,
             dtype=torch.float32,
         )
 
-        # Ensure image and label have the correct spatial size (args.img_size)
+        # Ensure image has the correct spatial size (H, W) = (1024, 1024)
+        # image is (D, H, W) from NiftiLoader
         H, W = 1024, 1024
-        img_h, img_w = image.shape[0], image.shape[1]
+        img_h, img_w = image.shape[1], image.shape[2]
         if (img_h, img_w) != (H, W):
-            # image: (H, W, D), label: (H, W, D)
-            # Add batch and channel dims for interpolation: (1, 1, D, H, W)
-            resize_image = image.permute(2, 0, 1).unsqueeze(1)
+            # Resize H, W slice-by-slice: (D, H, W) -> (D, 1, H, W) -> interpolate -> (D, 1, H', W')
+            resize_image = image.unsqueeze(1)
             resize_image = F.interpolate(
                 resize_image,
                 size=(H, W),
                 mode="bilinear",
                 align_corners=False,
             )
-            resize_image = resize_image.permute(1, 0, 2, 3)
+            resize_image = resize_image.squeeze(1).unsqueeze(0).unsqueeze(0)  # (1, 1, D, H, W)
         else:
-            resize_image = resize_image.unsqueeze(0)
+            resize_image = image.unsqueeze(0).unsqueeze(0)  # (1, 1, D, H, W)
 
         return image, resize_image
 
@@ -356,6 +365,7 @@ class Serie:
             slice_positions=slice_positions,
             voxel_spacing=voxel_spacing,
             nifti_path=nifti_path,
+            identifier=identifier,
         )
         return meta
 

@@ -110,15 +110,17 @@ def sitk_to_nifti(dcm_dir, save_img_file):
     return sitk.GetArrayFromImage(image3D).transpose(1, 2, 0)  # x, y, z
 
 
-def read_with_sitk(dcm_dir, depth_first=False):
-    series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(dcm_dir)
+def read_with_sitk(series_file_names, depth_first=False):
+    # series_file_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(dcm_dir)
     series_reader = sitk.ImageSeriesReader()
     series_reader.SetFileNames(series_file_names)
     image3D = series_reader.Execute()
     if depth_first:
-        return sitk.GetArrayFromImage(image3D)
+        # (z, y, x) order for depth-first processing
+        return sitk.GetArrayFromImage(image3D), image3D
     else:
-        return sitk.GetArrayFromImage(image3D).transpose(1, 2, 0)  # x, y, z
+        # (y, x, z)
+        return sitk.GetArrayFromImage(image3D).transpose(1, 2, 0), image3D  
 
 
 def transform_physicalpoint_to_index(dcm0, dcm1, coord):
