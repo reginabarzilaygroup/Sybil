@@ -218,23 +218,28 @@ class Serie:
         volumes = {}
         for key, meta in self._meta.items():
             # rve sample
-            nifti_volume, sitk_volume = read_with_sitk(
-                meta.paths, depth_first=True
-            )
+            nifti_volume, sitk_volume = read_with_sitk(meta.paths, depth_first=True)
             # logger.debug(f"Saved NIfTI for {key} at {meta.nifti_path}")
-            rve_volume = self._get_volume_for_rve(sitk_volume, "{}_{}".format(meta.identifier, key))
-            lungmask_volume, segmentation_volume = self._get_volume_for_segmentation(
-                nifti_volume, meta
+            rve_volume = self._get_volume_for_rve(
+                sitk_volume, "{}_{}".format(meta.identifier, key)
             )
+            segmentation_volume = self._get_volume_for_segmentation(nifti_volume, meta)
             volumes[key] = InputV2(
-                lungmask_volume=lungmask_volume,  # shared with confidence model
+                lungmask_volume=nifti_volume,  # shared with confidence model
                 segmentation_volume=segmentation_volume,  # shared with confidence model
                 rve_volume=rve_volume,
             )
         return volumes
 
-    def _get_volume_for_rve(self, sitk_volume: sitk.Image, accession: str) -> Optional[torch.Tensor]:
-        rve_path = self._loader["pillar"].rve_processor(sitk_volume, output_dir=self._cache_dir, accession=accession, series_number=1)
+    def _get_volume_for_rve(
+        self, sitk_volume: sitk.Image, accession: str
+    ) -> Optional[torch.Tensor]:
+        rve_path = self._loader["pillar"].rve_processor(
+            sitk_volume,
+            output_dir=self._cache_dir,
+            accession=accession,
+            series_number=1,
+        )
         volume = self._loader["pillar"].load_input(rve_path)["input"]
         # delete nifti_file after loading to save space
         if self._cache_dir is not None and os.path.exists(rve_path):
@@ -250,9 +255,7 @@ class Serie:
                 )
         return volume
 
-    def _get_volume_for_segmentation(
-        self, image: np.ndarray, meta
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_volume_for_segmentation(self, image: np.ndarray, meta) -> torch.Tensor:
         image = self._loader["nifti"].load_input(image)["input"]
         affine = torch.diag(meta.voxel_spacing)
         image = MetaTensor(
@@ -274,11 +277,13 @@ class Serie:
                 mode="bilinear",
                 align_corners=False,
             )
-            resize_image = resize_image.squeeze(1).unsqueeze(0).unsqueeze(0)  # (1, 1, D, H, W)
+            resize_image = (
+                resize_image.squeeze(1).unsqueeze(0).unsqueeze(0)
+            )  # (1, 1, D, H, W)
         else:
             resize_image = image.unsqueeze(0).unsqueeze(0)  # (1, 1, D, H, W)
 
-        return image, resize_image
+        return resize_image
 
     def _get_volume_v1(self) -> torch.Tensor:
         """
