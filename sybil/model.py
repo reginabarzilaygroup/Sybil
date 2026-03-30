@@ -96,7 +96,7 @@ CHECKPOINT_URL = os.getenv(
 )
 CHECKPOINT2_URL = os.getenv(
     "SYBIL_CHECKPOINT2_URL",
-    "https://github.com/reginabarzilaygroup/Sybil/releases/download/v1.5.0/sybil_checkpoints.zip",
+    "https://zenodo.org/records/19323196/files/sybil2_checkpoints.zip",
 )
 
 
@@ -133,22 +133,21 @@ def download_sybil2(name, cache) -> Tuple[List[str], str]:
         file_paths[modelname] = cur_checkpoint_path
         download_model_paths.append(cur_checkpoint_path)
 
+    if not have_all_files:
+        print(f"Downloading models to {cache}")
+        download_and_extract(CHECKPOINT2_URL, cache)
+
     pillar_path = os.path.join(cache, "pillar_seed0_epoch=2.ckpt")
     if not os.path.exists(pillar_path):
         logger.error(
-            f"""Expected pillar checkpoint not found at {pillar_path}. This is needed for Sybil2. 
+            f"""Expected pillar checkpoint not found at {pillar_path}. This is needed for Sybil2.
 Please ensure you download it from `https://huggingface.co/YalaLab/Pillar0-Sybil-1.5`.
 Save as `pillar_seed0_epoch=2.ckpt` in the cache directory ({cache})."""
         )
         raise FileNotFoundError(
             f"Expected pillar checkpoint not found at {pillar_path}"
         )
-    have_all_files &= os.path.exists(pillar_path)
     file_paths["pillar"] = pillar_path
-
-    if not have_all_files:
-        print(f"Downloading models to {cache}")
-        download_and_extract(CHECKPOINT2_URL, cache)
 
     return file_paths
 
@@ -582,7 +581,9 @@ class Sybil2:
 
         self.confidence_model = self.load_confidence_model(model_paths["confidence"])
 
-        self.model = self.load_model(model_paths["risk"], model_paths["malignancy"], model_paths["pillar"])
+        self.model = self.load_model(
+            model_paths["risk"], model_paths["malignancy"], model_paths["pillar"]
+        )
 
         self.calibrator = pickle.load(open(calibrator_path, "rb"))
         logger.info(f"Loaded Sybil2 calibrator from {calibrator_path}")
@@ -649,9 +650,9 @@ class Sybil2:
         if all(len(tp2nodules[tp]) == 0 for tp in timepoints):
             logger.info("No nodules found in any timepoint; skipping registration")
             return tp2nodules
-        
+
         volumes = serie.get_volume()
-        
+
         logger.info(
             f"Registering {len(timepoints)} timepoint(s) for longitudinal tracking"
         )
@@ -697,12 +698,8 @@ class Sybil2:
                 )
 
             # build ANTs images from the already-loaded CT volumes
-            past_vol = (
-                volumes[past_tp].lungmask_volume.permute(1, 2, 0).numpy()
-            )
-            current_vol = (
-                volumes[current_tp].lungmask_volume.permute(1, 2, 0).numpy()
-            )
+            past_vol = volumes[past_tp].lungmask_volume.permute(1, 2, 0).numpy()
+            current_vol = volumes[current_tp].lungmask_volume.permute(1, 2, 0).numpy()
 
             past_ants = _ants_from_dicom_geometry(past_vol, past_dcm0, past_dcm1)
             current_ants = _ants_from_dicom_geometry(
@@ -770,9 +767,13 @@ class Sybil2:
             lung_mask = self.lung_mask_model.apply(lungmask_volume.numpy())
 
             # step 2: compute nodule segmentation
-            seg_out = self.segmentation_model.predict(segmentation_volume.to(self.device), sw_batch_size=16)
+            seg_out = self.segmentation_model.predict(
+                segmentation_volume.to(self.device), sw_batch_size=16
+            )
             seg_out = F.softmax(seg_out, 1)
-            nodule_seg = 1 * (seg_out[:, -1] > 0.5)  # (1, D, H, W) nodule probability map
+            nodule_seg = 1 * (
+                seg_out[:, -1] > 0.5
+            )  # (1, D, H, W) nodule probability map
             del seg_out
             torch.cuda.empty_cache()
 
@@ -782,7 +783,9 @@ class Sybil2:
             else:
                 lung_mask_t = (lung_mask > 0).float()
 
-            lung_mask_t = F.interpolate(lung_mask_t.unsqueeze(1), size=(1024, 1024), mode="nearest")
+            lung_mask_t = F.interpolate(
+                lung_mask_t.unsqueeze(1), size=(1024, 1024), mode="nearest"
+            )
             lung_mask_t = lung_mask_t.squeeze(1)
             lung_mask_t = (lung_mask_t > 0).float().to(self.device)
 
@@ -792,8 +795,12 @@ class Sybil2:
             isegmentation, nnodules = cc3d.connected_components(
                 combined_seg.cpu().numpy(), return_N=True
             )
-            isegmentation = torch.from_numpy(isegmentation.astype(np.float32))  # (D, H, W)
-            sparse_seg = isegmentation.permute(1, 2, 0).to_sparse()  # (H, W, D) for prepare_for_*
+            isegmentation = torch.from_numpy(
+                isegmentation.astype(np.float32)
+            )  # (D, H, W)
+            sparse_seg = isegmentation.permute(
+                1, 2, 0
+            ).to_sparse()  # (H, W, D) for prepare_for_*
 
             meta = serie._meta[timepoint]
             volume_spacing = meta.voxel_spacing.prod().item()
@@ -834,7 +841,9 @@ class Sybil2:
 
             # sort by confidence descending and truncate to MAX_NUM_NODULES per timepoint
             if len(tp_confidence) > 0:
-                conf_order = torch.argsort(tp_confidence, descending=True)[:MAX_NUM_NODULES]
+                conf_order = torch.argsort(tp_confidence, descending=True)[
+                    :MAX_NUM_NODULES
+                ]
                 valid_ids = valid_ids[conf_order]
                 valid_vols = valid_vols[conf_order]
                 tp_confidence = tp_confidence[conf_order]
@@ -849,14 +858,12 @@ class Sybil2:
             # NOTE: generate_luna25_patches.py
             # NOTE: nlst_luna25 process_item() in reference_files/luna25.py
             # ordered by nodule_ids
-            malignancy_input = serie.prepare_for_malignancy_model(
-                sparse_seg, ct_hwz
-            )
+            malignancy_input = serie.prepare_for_malignancy_model(sparse_seg, ct_hwz)
 
             # step 7: pass through pillar model
             pillar_output = self.model.pillar_forward(
                 version2_inputs[timepoint].rve_volume.to(self.device)[None],
-                {"anatomy": ["chest_ct"]}
+                {"anatomy": ["chest_ct"]},
             )
 
             x.append(pillar_output["pillar_features"])
@@ -867,7 +874,8 @@ class Sybil2:
             patch_ids = sparse_seg.values().unique()
             patch_ids = patch_ids[patch_ids > 0]
             tp_nodule_patches = {
-                nid.item(): malignancy_input[i].permute(2, 0, 1) for i, nid in enumerate(patch_ids)
+                nid.item(): malignancy_input[i].permute(2, 0, 1)
+                for i, nid in enumerate(patch_ids)
             }
 
             tp_data[timepoint] = {
@@ -980,8 +988,14 @@ class Sybil2:
                 )
 
         x_t = torch.cat(x, dim=0)  # (N_tp, C)
-        nodule_x_t = torch.stack(nodule_x, dim=0) if nodule_x else torch.zeros(0, 32, 128, 128)
-        nodule_confidence_t = torch.stack(nodule_confidence, dim=0) if nodule_confidence else torch.zeros(0)
+        nodule_x_t = (
+            torch.stack(nodule_x, dim=0) if nodule_x else torch.zeros(0, 32, 128, 128)
+        )
+        nodule_confidence_t = (
+            torch.stack(nodule_confidence, dim=0)
+            if nodule_confidence
+            else torch.zeros(0)
+        )
         nodule_ids_tracked_t = torch.tensor(nodule_ids_tracked, dtype=torch.long)
         nodule_tp_id_t = torch.tensor(nodule_tp_id, dtype=torch.long)
         nodule_volumes_t = torch.tensor(nodule_volumes, dtype=torch.float32)
@@ -989,33 +1003,83 @@ class Sybil2:
         nodule_batch_id_t = torch.tensor(nodule_batch_id, dtype=torch.long)
 
         # pad each timepoint to MAX_NUM_NODULES, then concatenate and add batch dim
-        padded: Dict[str, List] = {k: [] for k in [
-            "nodule_x", "nodule_confidence", "nodule_ids_tracked",
-            "nodule_tp_id", "nodule_volumes", "old_nodule_ids", "nodule_batch_id",
-        ]}
+        padded: Dict[str, List] = {
+            k: []
+            for k in [
+                "nodule_x",
+                "nodule_confidence",
+                "nodule_ids_tracked",
+                "nodule_tp_id",
+                "nodule_volumes",
+                "old_nodule_ids",
+                "nodule_batch_id",
+            ]
+        }
         for tp in sorted(tp_data.keys()):
             tp_mask = nodule_tp_id_t == tp
             n_tp = tp_mask.sum().item()
             pad = MAX_NUM_NODULES - n_tp
-            padded["nodule_x"].append(torch.cat([nodule_x_t[tp_mask], torch.zeros(pad, *nodule_x_t.shape[1:])]))
-            padded["nodule_confidence"].append(torch.cat([nodule_confidence_t[tp_mask], torch.zeros(pad)]))
-            padded["nodule_ids_tracked"].append(torch.cat([nodule_ids_tracked_t[tp_mask], torch.full((pad,), -1, dtype=torch.long)]))
-            padded["nodule_tp_id"].append(torch.cat([nodule_tp_id_t[tp_mask], torch.zeros(pad, dtype=torch.long)]))
-            padded["nodule_volumes"].append(torch.cat([nodule_volumes_t[tp_mask], torch.zeros(pad)]))
-            padded["old_nodule_ids"].append(torch.cat([old_nodule_ids_t[tp_mask], torch.full((pad,), -1, dtype=torch.long)]))
-            padded["nodule_batch_id"].append(torch.cat([nodule_batch_id_t[tp_mask], torch.zeros(pad, dtype=torch.long)]))
+            padded["nodule_x"].append(
+                torch.cat(
+                    [nodule_x_t[tp_mask], torch.zeros(pad, *nodule_x_t.shape[1:])]
+                )
+            )
+            padded["nodule_confidence"].append(
+                torch.cat([nodule_confidence_t[tp_mask], torch.zeros(pad)])
+            )
+            padded["nodule_ids_tracked"].append(
+                torch.cat(
+                    [
+                        nodule_ids_tracked_t[tp_mask],
+                        torch.full((pad,), -1, dtype=torch.long),
+                    ]
+                )
+            )
+            padded["nodule_tp_id"].append(
+                torch.cat([nodule_tp_id_t[tp_mask], torch.zeros(pad, dtype=torch.long)])
+            )
+            padded["nodule_volumes"].append(
+                torch.cat([nodule_volumes_t[tp_mask], torch.zeros(pad)])
+            )
+            padded["old_nodule_ids"].append(
+                torch.cat(
+                    [
+                        old_nodule_ids_t[tp_mask],
+                        torch.full((pad,), -1, dtype=torch.long),
+                    ]
+                )
+            )
+            padded["nodule_batch_id"].append(
+                torch.cat(
+                    [nodule_batch_id_t[tp_mask], torch.zeros(pad, dtype=torch.long)]
+                )
+            )
 
         return {
-            "x": x_t.unsqueeze(0),                                                          # (1, N_tp, C)
-            "logit": torch.cat(logit, dim=0).unsqueeze(0),                                  # (1, N_tp, num_years)
-            "nodule_x": torch.cat(padded["nodule_x"], dim=0).unsqueeze(0),                  # (1, N_tp*MAX_NUM, D, H, W)
-            "nodule_confidence": torch.cat(padded["nodule_confidence"], dim=0).unsqueeze(0),         # (1, N_tp*MAX_NUM)
-            "nodule_ids_tracked": torch.cat(padded["nodule_ids_tracked"], dim=0).unsqueeze(0),       # (1, N_tp*MAX_NUM)
-            "nodule_tp_id": torch.cat(padded["nodule_tp_id"], dim=0).unsqueeze(0),                   # (1, N_tp*MAX_NUM)
-            "nodule_volumes": torch.cat(padded["nodule_volumes"], dim=0).unsqueeze(0),               # (1, N_tp*MAX_NUM)
-            "old_nodule_ids": torch.cat(padded["old_nodule_ids"], dim=0).unsqueeze(0),               # (1, N_tp*MAX_NUM)
-            "has_prior": torch.tensor([len(tp_data) > 1], dtype=torch.float32),                      # (1,)
-            "nodule_batch_id": torch.cat(padded["nodule_batch_id"], dim=0).unsqueeze(0),             # (1, N_tp*MAX_NUM)
+            "x": x_t.unsqueeze(0),  # (1, N_tp, C)
+            "logit": torch.cat(logit, dim=0).unsqueeze(0),  # (1, N_tp, num_years)
+            "nodule_x": torch.cat(padded["nodule_x"], dim=0).unsqueeze(
+                0
+            ),  # (1, N_tp*MAX_NUM, D, H, W)
+            "nodule_confidence": torch.cat(
+                padded["nodule_confidence"], dim=0
+            ).unsqueeze(0),  # (1, N_tp*MAX_NUM)
+            "nodule_ids_tracked": torch.cat(
+                padded["nodule_ids_tracked"], dim=0
+            ).unsqueeze(0),  # (1, N_tp*MAX_NUM)
+            "nodule_tp_id": torch.cat(padded["nodule_tp_id"], dim=0).unsqueeze(
+                0
+            ),  # (1, N_tp*MAX_NUM)
+            "nodule_volumes": torch.cat(padded["nodule_volumes"], dim=0).unsqueeze(
+                0
+            ),  # (1, N_tp*MAX_NUM)
+            "old_nodule_ids": torch.cat(padded["old_nodule_ids"], dim=0).unsqueeze(
+                0
+            ),  # (1, N_tp*MAX_NUM)
+            "has_prior": torch.tensor([len(tp_data) > 1], dtype=torch.float32),  # (1,)
+            "nodule_batch_id": torch.cat(padded["nodule_batch_id"], dim=0).unsqueeze(
+                0
+            ),  # (1, N_tp*MAX_NUM)
         }
 
     @torch.inference_mode()
@@ -1062,7 +1126,7 @@ class Sybil2:
                         version2_inputs[key] = version2_inputs[key].to(self.device)
 
             version2_inputs["anatomy"] = ["chest_ct"] * version2_inputs["x"].shape[0]
-            out = model(version2_inputs['x'], version2_inputs)
+            out = model(version2_inputs["x"], version2_inputs)
             logits = out["logit"].squeeze(0)
             score = (1 - torch.cumprod(torch.sigmoid(logits), dim=-1)).cpu().numpy()
             scores.append(score.tolist())
@@ -1217,7 +1281,9 @@ class Sybil2:
                 lung_mask_t = lung_mask_t.squeeze(1).to(self.device)
                 lung_mask_t = (lung_mask_t > 0).float()
 
-                combined_seg = (nodule_seg * lung_mask_t).float().squeeze(0)  # (D, H, W)
+                combined_seg = (
+                    (nodule_seg * lung_mask_t).float().squeeze(0)
+                )  # (D, H, W)
                 del nodule_seg, lung_mask_t
                 torch.cuda.empty_cache()
 
@@ -1262,7 +1328,9 @@ class Sybil2:
                 all_patches.append(confidence_input)
 
                 # malignancy patches — permute (H,W,D) → (D,H,W) per patch
-                malignancy_input = serie.prepare_for_malignancy_model(sparse_seg, ct_hwz)
+                malignancy_input = serie.prepare_for_malignancy_model(
+                    sparse_seg, ct_hwz
+                )
                 patch_ids = sparse_seg.values().unique()
                 patch_ids = patch_ids[patch_ids > 0]
                 nodule_patches = {
@@ -1273,7 +1341,7 @@ class Sybil2:
                 # pillar forward
                 pillar_output = self.model.pillar_forward(
                     version2_inputs[timepoint].rve_volume.to(self.device)[None],
-                    {"anatomy": ["chest_ct"]}
+                    {"anatomy": ["chest_ct"]},
                 )
                 x.append(pillar_output["pillar_features"])
                 logit.append(pillar_output["pillar_risk"])
@@ -1328,7 +1396,9 @@ class Sybil2:
 
             # sort each timepoint's nodules by confidence (desc) and keep top MAX_NUM_NODULES
             for tp, tp_info in tp_data.items():
-                conf = tp_info.get("nodule_confidence", torch.zeros(len(tp_info["nodule_ids"])))
+                conf = tp_info.get(
+                    "nodule_confidence", torch.zeros(len(tp_info["nodule_ids"]))
+                )
                 if len(conf) > 0:
                     order = torch.argsort(conf, descending=True)[:MAX_NUM_NODULES]
                     tp_info["nodule_ids"] = tp_info["nodule_ids"][order]
@@ -1339,8 +1409,9 @@ class Sybil2:
                     seg_idxs = tp_info["sparse_seg"].indices()
                     keep_mask = torch.isin(seg_vals, kept_ids)
                     tp_info["sparse_seg"] = torch.sparse_coo_tensor(
-                        seg_idxs[:, keep_mask], seg_vals[keep_mask],
-                        tp_info["sparse_seg"].shape
+                        seg_idxs[:, keep_mask],
+                        seg_vals[keep_mask],
+                        tp_info["sparse_seg"].shape,
                     ).coalesce()
                 else:
                     tp_info["nodule_confidence"] = conf
@@ -1389,7 +1460,9 @@ class Sybil2:
                     i + 1: {tp: meta} for i, (_, meta) in enumerate(tp2nodules[tp])
                 }
 
-            return self._assemble_inputs(tp_data, tracked_nodules, data["x"], data["logit"])
+            return self._assemble_inputs(
+                tp_data, tracked_nodules, data["x"], data["logit"]
+            )
 
         valid_indices = [i for i in range(n) if inter[i] is not None]
         max_workers = min(4, max(1, len(valid_indices)))
@@ -1525,7 +1598,11 @@ class Sybil2:
 
                 serie_inputs["anatomy"] = ["chest_ct"] * serie_inputs["x"].shape[0]
                 out = self.model(serie_inputs["x"], serie_inputs)
-                score = (1 - torch.cumprod(torch.sigmoid(out["logit"].squeeze(0)), dim=-1)).cpu().numpy()
+                score = (
+                    (1 - torch.cumprod(torch.sigmoid(out["logit"].squeeze(0)), dim=-1))
+                    .cpu()
+                    .numpy()
+                )
                 calib = self._calibrate(np.array([score.tolist()])).tolist()
 
                 result: Dict[str, Any] = {
