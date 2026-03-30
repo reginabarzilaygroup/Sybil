@@ -338,8 +338,12 @@ class Serie:
                 slice_positions.append(float(dcm.ImagePositionPatient[-1]))
 
             processed_paths, slice_positions = order_slices(
-                processed_paths, slice_positions
+                processed_paths,
+                slice_positions,
             )
+            if self._args.reverse_slice_order:
+                processed_paths = processed_paths[::-1]
+                slice_positions = slice_positions[::-1]
 
             thickness = float(dcm.SliceThickness)
             pixel_spacing = list(map(float, dcm.PixelSpacing))
@@ -400,6 +404,7 @@ class Serie:
                 "use_annotations": False,
                 "fix_seed_for_multi_image_augmentations": True,
                 "slice_thickness_filter": 5,
+                "reverse_slice_order": False,
             }
         )
         return args
@@ -426,6 +431,7 @@ class Serie:
                 "use_annotations": False,
                 "fix_seed_for_multi_image_augmentations": True,
                 "slice_thickness_filter": 3,
+                "reverse_slice_order": True,
             }
         )
         return args
