@@ -214,6 +214,7 @@ class Sybil17(nn.Module):
             nodule_model_ckpt = torch.load(
                 ckpt_path,
                 weights_only=False,
+                map_location="cpu",
             )
             args = nodule_model_ckpt["hyper_parameters"]["args"]
             self.nodule_model = SegFormerClassifier(args)

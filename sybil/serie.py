@@ -11,6 +11,7 @@ import SimpleITK as sitk
 import torchio as tio
 import torch.nn.functional as F
 from monai.data import MetaTensor
+from monai.transforms import ResizeWithPadOrCrop, ScaleIntensity
 from loguru import logger
 from sybil.datasets.utils import order_slices, VOXEL_SPACING
 from sybil.utils.loading import get_sample_loader
@@ -23,7 +24,7 @@ def _pad_axis(lo: int, hi: int, min_size: int, max_size: int):
     pad = max(0, min_size - size)
     lo = max(0, lo - pad // 2)
     hi = min(max_size, lo + max(size, min_size))
-    lo = max(0, hi - max(size, min_size))
+    lo = max(0, lo)
     return lo, hi
 
 
@@ -235,7 +236,8 @@ class Serie:
         self, sitk_volume: sitk.Image, accession: str
     ) -> Optional[torch.Tensor]:
         rve_path = self._loader["pillar"].rve_processor(
-            sitk_volume,
+            # reverse order for RVE processing if needed (e.g. if DICOM slices are in ascending order but RVE expects descending)
+            sitk_volume[::-1, :, :],
             output_dir=self._cache_dir,
             accession=accession,
             series_number=1,
@@ -341,9 +343,6 @@ class Serie:
                 processed_paths,
                 slice_positions,
             )
-            if self._args.reverse_slice_order:
-                processed_paths = processed_paths[::-1]
-                slice_positions = slice_positions[::-1]
 
             thickness = float(dcm.SliceThickness)
             pixel_spacing = list(map(float, dcm.PixelSpacing))
@@ -404,7 +403,6 @@ class Serie:
                 "use_annotations": False,
                 "fix_seed_for_multi_image_augmentations": True,
                 "slice_thickness_filter": 5,
-                "reverse_slice_order": False,
             }
         )
         return args
@@ -431,7 +429,6 @@ class Serie:
                 "use_annotations": False,
                 "fix_seed_for_multi_image_augmentations": True,
                 "slice_thickness_filter": 3,
-                "reverse_slice_order": True,
             }
         )
         return args
@@ -489,7 +486,10 @@ class Serie:
         torch.Tensor
             Shape (N_nodules, 2, H_crop, W_crop, D_crop).
         """
-        H_CROP, W_CROP, D_CROP = crop_size
+        H_CROP, W_CROP, D_CROP = (128, 128, 10) 
+        resize_with_pad_or_crop = ResizeWithPadOrCrop(spatial_size=crop_size)
+        scale_intensity = ScaleIntensity()
+
         img_h, img_w, img_d = image.shape
 
         sparse_seg = sparse_seg.coalesce()
@@ -519,10 +519,14 @@ class Serie:
             ].permute(1, 2, 0)
             patchl = patch_seg[y1:y2, x1:x2, z1:z2]
 
+            patchx = scale_intensity(resize_with_pad_or_crop(patchx.unsqueeze(0))).squeeze(0)
+            patchl = resize_with_pad_or_crop(patchl.unsqueeze(0)).squeeze(0)
+
             patches.append(torch.stack([patchx, patchl]))  # (2, H_crop, W_crop, D_crop)
 
         if patches:
             return torch.stack(patches)  # (N, 2, H_crop, W_crop, D_crop)
+        patches = patches.permuted(0, 1, 4, 2, 3)  # (N, 2, D_crop, H_crop, W_crop)
         return torch.zeros(0, 2, H_CROP, W_CROP, D_CROP)
 
     def prepare_for_malignancy_model(
@@ -548,6 +552,8 @@ class Serie:
             Shape (N_nodules, H_crop, W_crop, D_crop).
         """
         H_CROP, W_CROP, D_CROP = crop_size
+        resize_with_pad_or_crop = ResizeWithPadOrCrop(spatial_size=crop_size)
+        scale_intensity = ScaleIntensity()
         img_h, img_w, img_d = image.shape
 
         sparse_seg = sparse_seg.coalesce()
@@ -576,10 +582,17 @@ class Serie:
             zmin = max(0, zcenter - D_CROP // 2)
             zmax = min(img_d, zmin + D_CROP)
 
-            patches.append(
-                image[ymin:ymax, xmin:xmax, zmin:zmax]
-            )  # (H_crop, W_crop, D_crop)
+            patch = image[ymin:ymax, xmin:xmax, zmin:zmax]
+            patch = scale_intensity(resize_with_pad_or_crop(patch.unsqueeze(0))).squeeze(0)
+
+            patches.append(patch)  # (H_crop, W_crop, D_crop)
+
+            # image_dict = self.patch_augmentations._transform(image_dict) # ResizeWithPadOrCropd
+            # image_dict = self.patch_augmentations.predict_transforms.transforms[-1]( # ScaleIntensityd
+                #     image_dict
+                # )
 
         if patches:
-            return torch.stack(patches)  # (N, H_crop, W_crop, D_crop)
-        return torch.zeros(0, H_CROP, W_CROP, D_CROP)
+            patches = torch.stack(patches)  # (N, H_crop, W_crop, D_crop)
+        patches = torch.zeros(0, H_CROP, W_CROP, D_CROP)
+        return patches.permute(0, 3, 1, 2)  # (N, D_crop, H_crop, W_crop)

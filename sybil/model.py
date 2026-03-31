@@ -620,6 +620,7 @@ class Sybil2:
         logger.info(f"Loading nodule segmentation model from {path}")
         checkpoint = torch.load(path, weights_only=False, map_location="cpu")
         args = checkpoint["hyper_parameters"]["args"]
+        args.module_snapshot = None
         state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
         model = nnUNet(args)
         model.load_state_dict(state_dict)
@@ -633,6 +634,7 @@ class Sybil2:
         logger.info(f"Loading confidence model from {path}")
         checkpoint = torch.load(path, weights_only=False, map_location="cpu")
         args = checkpoint["hyper_parameters"]["args"]
+        args.module_snapshot = None
         state_dict = {k[6:]: v for k, v in checkpoint["state_dict"].items()}
         model = nnUNetConfidence(args)
         model.load_state_dict(state_dict)
@@ -764,7 +766,7 @@ class Sybil2:
             logger.debug(f"Processing timepoint {timepoint}")
 
             # step 1: compute lung mask
-            lung_mask = self.lung_mask_model.apply(lungmask_volume.numpy())
+            lung_mask = self.lung_mask_model.apply(lungmask_volume)
 
             # step 2: compute nodule segmentation
             seg_out = self.segmentation_model.predict(
@@ -829,13 +831,15 @@ class Sybil2:
             # prepare_for_* functions expect (H, W, D) image on CPU
             ct_hwz = segmentation_volume.squeeze().cpu().permute(1, 2, 0)  # (H, W, D)
             confidence_input = serie.prepare_for_confidence_model(
-                sparse_seg, ct_hwz, combined_seg.cpu()
+                sparse_seg, ct_hwz, combined_seg.cpu(), crop_size=(128, 128, 32)
             )
 
             # step 5: compute confidence scores
             if confidence_input.shape[0] > 0:
                 confidence_out = self.confidence_model(confidence_input.to(self.device))
-                tp_confidence = confidence_out["logit"].sigmoid()  # (N_nodules,)
+                conf_logit = confidence_out["logit"]
+                # conf_logit is (N, 2): class-0 = background, class-1 = nodule
+                tp_confidence = torch.softmax(conf_logit, -1)[:, -1]  # (N_nodules,)
             else:
                 tp_confidence = torch.zeros(0, device=self.device)
 
@@ -843,10 +847,10 @@ class Sybil2:
             if len(tp_confidence) > 0:
                 conf_order = torch.argsort(tp_confidence, descending=True)[
                     :MAX_NUM_NODULES
-                ]
+                ].cpu()
                 valid_ids = valid_ids[conf_order]
                 valid_vols = valid_vols[conf_order]
-                tp_confidence = tp_confidence[conf_order]
+                tp_confidence = tp_confidence[conf_order.to(tp_confidence.device)]
                 seg_vals = sparse_seg.values()
                 seg_idxs = sparse_seg.indices()
                 keep_mask = torch.isin(seg_vals, valid_ids)
@@ -858,7 +862,7 @@ class Sybil2:
             # NOTE: generate_luna25_patches.py
             # NOTE: nlst_luna25 process_item() in reference_files/luna25.py
             # ordered by nodule_ids
-            malignancy_input = serie.prepare_for_malignancy_model(sparse_seg, ct_hwz)
+            malignancy_input = serie.prepare_for_malignancy_model(sparse_seg, ct_hwz, crop_size=(128, 128, 32))
 
             # step 7: pass through pillar model
             pillar_output = self.model.pillar_forward(
@@ -1370,7 +1374,7 @@ class Sybil2:
             if self.device is not None:
                 batch_patches = batch_patches.to(self.device)
             confidence_scores = (
-                self.confidence_model(batch_patches)["logit"].sigmoid().cpu()
+                self.confidence_model(batch_patches)["logit"][:, 1].sigmoid().cpu()
             )
 
             offset = 0
