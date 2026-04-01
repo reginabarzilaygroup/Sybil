@@ -878,7 +878,7 @@ class Sybil2:
             patch_ids = sparse_seg.values().unique()
             patch_ids = patch_ids[patch_ids > 0]
             tp_nodule_patches = {
-                nid.item(): malignancy_input[i].permute(2, 0, 1)
+                nid.item(): malignancy_input[i]
                 for i, nid in enumerate(patch_ids)
             }
 

@@ -594,5 +594,6 @@ class Serie:
 
         if patches:
             patches = torch.stack(patches)  # (N, H_crop, W_crop, D_crop)
-        patches = torch.zeros(0, H_CROP, W_CROP, D_CROP)
+        else:
+            patches = torch.zeros(0, H_CROP, W_CROP, D_CROP)
         return patches.permute(0, 3, 1, 2)  # (N, D_crop, H_crop, W_crop)
