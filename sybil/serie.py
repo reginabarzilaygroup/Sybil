@@ -236,8 +236,10 @@ class Serie:
         self, sitk_volume: sitk.Image, accession: str
     ) -> Optional[torch.Tensor]:
         rve_path = self._loader["pillar"].rve_processor(
-            # reverse order for RVE processing if needed (e.g. if DICOM slices are in ascending order but RVE expects descending)
-            sitk_volume[::-1, :, :],
+            # flip because Pillar / Sybil1.5 was trained on mostly axial scans 
+            # with z-axis flipped compared to ITK convention (InstanceNumber vs ImagePositionPatient)
+            # so we flip to maintain consistency with the training data
+            sitk.Flip(sitk_volume, [False, False, True]), 
             output_dir=self._cache_dir,
             accession=accession,
             series_number=1,
