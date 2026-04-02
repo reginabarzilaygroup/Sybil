@@ -700,8 +700,8 @@ class Sybil2:
                 )
 
             # build ANTs images from the already-loaded CT volumes
-            past_vol = volumes[past_tp].lungmask_volume.permute(1, 2, 0).numpy()
-            current_vol = volumes[current_tp].lungmask_volume.permute(1, 2, 0).numpy()
+            past_vol = volumes[past_tp].lungmask_volume.transpose(1, 2, 0)
+            current_vol = volumes[current_tp].lungmask_volume.transpose(1, 2, 0)
 
             past_ants = _ants_from_dicom_geometry(past_vol, past_dcm0, past_dcm1)
             current_ants = _ants_from_dicom_geometry(
@@ -1029,35 +1029,34 @@ class Sybil2:
                 )
             )
             padded["nodule_confidence"].append(
-                torch.cat([nodule_confidence_t[tp_mask], torch.zeros(pad)])
+                torch.cat([nodule_confidence_t[tp_mask], torch.zeros(pad, device=nodule_confidence_t.device) ])
             )
             padded["nodule_ids_tracked"].append(
                 torch.cat(
                     [
                         nodule_ids_tracked_t[tp_mask],
-                        torch.full((pad,), -1, dtype=torch.long),
+                        torch.full((pad,), -1, dtype=torch.long, device=nodule_ids_tracked_t.device),
                     ]
                 )
             )
             padded["nodule_tp_id"].append(
-                torch.cat([nodule_tp_id_t[tp_mask], torch.zeros(pad, dtype=torch.long)])
+                torch.cat([nodule_tp_id_t[tp_mask], torch.zeros(pad, dtype=torch.long, device=nodule_tp_id_t.device)])
             )
             padded["nodule_volumes"].append(
-                torch.cat([nodule_volumes_t[tp_mask], torch.zeros(pad)])
+                torch.cat([nodule_volumes_t[tp_mask], torch.zeros(pad, device=nodule_volumes_t.device)])
             )
             padded["old_nodule_ids"].append(
                 torch.cat(
                     [
                         old_nodule_ids_t[tp_mask],
-                        torch.full((pad,), -1, dtype=torch.long),
+                        torch.full((pad,), -1, dtype=torch.long, device=old_nodule_ids_t.device),
                     ]
                 )
             )
             padded["nodule_batch_id"].append(
                 torch.cat(
-                    [nodule_batch_id_t[tp_mask], torch.zeros(pad, dtype=torch.long)]
+                    [nodule_batch_id_t[tp_mask], torch.zeros(pad, dtype=torch.long, device=nodule_batch_id_t.device) ])
                 )
-            )
 
         return {
             "x": x_t.unsqueeze(0),  # (1, N_tp, C)
