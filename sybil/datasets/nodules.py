@@ -20,21 +20,15 @@ class NodulesPatches(NLST_Survival_Dataset):
         nlst_args = copy.deepcopy(args)
         # dataset paths
         luna_args.dataset_file_path = (
-            "/data/rbg/shared/datasets/LUNA16/LUNA16/luna_dataset_v4.json"
+            "luna_dataset_v4.json" # parsed luna dataset
         )
         nlst_args.dataset_file_path = (
-            "/data/rbg/shared/datasets/NLST/NLST/stmix_segmentation_dataset.json"
+            "stmix_segmentation_dataset.json" # parsed nlst dataset with segmentation-based nodule annotations
         )
 
         # loaders
         luna_args.input_loader_name = "biomedparse_loader"
         nlst_args.input_loader_name = "dicom_loader"
-
-        if args.cache_path is not None:
-            luna_args.cache_path = "/data/rbg/shared/datasets/LUNA16/LUNA16/monai_cache"
-            nlst_args.cache_path = (
-                None  # "/data/rbg/shared/datasets/NLST/NLST/monai_cache"
-            )
 
         # datasets
         self.luna = LUNA_Patches(luna_args, split_group)
@@ -87,18 +81,12 @@ class NodulesConfidenceFlat(NodulesPatches):
         luna_args = copy.deepcopy(args)
         nlst_args = copy.deepcopy(args)
         # dataset paths
-        luna_args.dataset_file_path = "/data/rbg/shared/datasets/LUNA16/LUNA16/luna_dataset_v4_predicted_boxes.json"
-        nlst_args.dataset_file_path = "/data/rbg/shared/datasets/NLST/NLST/stmix_segmentation_predicted_boxes_dataset.json"
+        luna_args.dataset_file_path = "luna_dataset_v4_predicted_boxes.json"
+        nlst_args.dataset_file_path = "stmix_segmentation_predicted_boxes_dataset.json"
 
         # loaders
         luna_args.input_loader_name = "biomedparse_loader"
         nlst_args.input_loader_name = "dicom_loader"
-
-        if args.cache_path is not None:
-            luna_args.cache_path = "/data/rbg/shared/datasets/LUNA16/LUNA16/monai_cache"
-            nlst_args.cache_path = (
-                None  # "/data/rbg/shared/datasets/NLST/NLST/monai_cache"
-            )
 
         # datasets
         self.luna = LUNA_Confidence_Flat(luna_args, split_group)

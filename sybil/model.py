@@ -598,7 +598,7 @@ class Sybil2:
         model = Sybil17(args)
         model.load_state_dict(state_dict)
         # add pillar model here becasue it was not trained with model and is not in state_dict
-        model._load_pillar_model(args)
+        model._load_pillar_model(args['pillar_ft_args'])
         model.eval()
         logger.debug("Initialized Sybil2 malignancy model")
         if self.device is not None:

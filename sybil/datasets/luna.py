@@ -31,7 +31,7 @@ class LUNA(NLST_Survival_Dataset):
             and additional information regarding exam or participant
         """
         self.nodule_counts_csv = pd.read_excel(
-            "/data/rbg/shared/datasets/LUNA16/LUNA16/lidc-idr_nodule_counts_6-23-2015.xlsx"
+            "LUNA16/lidc-idr_nodule_counts_6-23-2015.xlsx"
         )
 
         dataset = []
@@ -415,7 +415,7 @@ class LUNA_Patches(LUNA):
 
                     # Load lung mask (assume path is in sample["lung_mask_path"])
                     lung_mask = np.load(
-                        "/data/rbg/scratch/lung_ct/luna_lung_mask/sample_{}.npy".format(
+                        "/path/to/lungmask/dir/luna_lung_mask/sample_{}.npy".format(
                             sample["vol_exam"]
                         )
                     )  # binary mask, shape (H, W, D)
@@ -573,7 +573,7 @@ class LUNA_Confidence(LUNA_Patches):
                 if sample_from_predictions or (not use_teacher_forcing):
                     segmentation = pickle.load(
                         open(
-                            f"/data/rbg/scratch/lung_ct/luna-stmix/last/sample_{sample['vol_exam']}.hiddens",
+                            f"/path/to/hiddens/dir/luna-stmix/last/sample_{sample['vol_exam']}.hiddens",
                             "rb",
                         )
                     )
@@ -851,7 +851,7 @@ class LUNA_Confidence_Flat(LUNA_Patches):
                 if not is_true_box:
                     segmentation = pickle.load(
                         open(
-                            f"/data/rbg/scratch/lung_ct/luna-stmix/last/sample_{sample['vol_exam']}.hiddens",
+                            f"/path/to/hiddens/dir/luna-stmix/last/sample_{sample['vol_exam']}.hiddens",
                             "rb",
                         )
                     )
@@ -1043,14 +1043,8 @@ class LUNA2(LUNA):
                 # save the sample to cache
                 torch.save({"label": label, "image": image}, cache_path)
 
-        if not os.path.exists(
-            "/data/rbg/scratch/lung_ct/luna_lung_mask/sample_{}.npy".format(
-                sample["exam"]
-            )
-        ):
-            return
         lung_mask = np.load(
-            "/data/rbg/scratch/lung_ct/luna_lung_mask/sample_{}.npy".format(
+            "/path/to/lungmask/dir/luna_lung_mask/sample_{}.npy".format(
                 sample["exam"]
             )
         )

@@ -11,12 +11,6 @@ import loguru as logger
 
 class MultiStage(BaseMultiStage):
     def __init__(self, args):
-        args = pickle.load(
-            open(
-                "/data/rbg/users/pgmikhael/mammogram/yala/pillar-finetune-refactored/pillarft.args",
-                "rb",
-            )
-        )
         kwargs = args.model["kwargs"]
         super().__init__(args, **kwargs)
 

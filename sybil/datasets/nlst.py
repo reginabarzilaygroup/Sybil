@@ -1303,7 +1303,7 @@ class NLST_Patches(NLST_Survival_Dataset):
             y = 1
             if self.split_group in ["train", "dev"]:
                 lung_mask_path = (
-                    "/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{}.npy".format(
+                    "/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{}.npy".format(
                         sample["vol_exam"]
                     )
                 )
@@ -1582,7 +1582,7 @@ class NLST_Confidence_Flat(NLST_Patches):
                 if not is_true_box:
                     segmentation = pickle.load(
                         open(
-                            f"/data/rbg/scratch/lung_ct/luna-stmix/last/sample_{sample['vol_exam']}.hiddens",
+                            f"/path/to/local/cache/lung_ct/luna-stmix/last/sample_{sample['vol_exam']}.hiddens",
                             "rb",
                         )
                     )
@@ -1674,7 +1674,7 @@ class NLST_PidsWithAbnormalitiesForNnUNet(NLST_PidsWithAbnormalities):
 
     def process_item(self, sample):
         try:
-            path = "/data/rbg/scratch/lung_ct/nlst_nifti/sample_{}.nii.gz".format(
+            path = "/path/to/local/cache/lung_ct/nlst_nifti/sample_{}.nii.gz".format(
                 sample["exam"]
             )
 
@@ -1933,19 +1933,19 @@ class NLST_SegmentationProcessing(NLST_Survival_Dataset):
             "nlst_abnormalities51_nnunet_segmentation_abn/last",
         ]:
             for segfile in os.listdir(
-                os.path.join("/data/rbg/scratch/lung_ct", segdir)
+                os.path.join("/path/to/local/cache/lung_ct", segdir)
             ):
                 exam = segfile.split("_")[1].split(".")[0]
                 exam = exam[:17] if len(exam) > 17 else exam
                 segmentation_files[exam] = os.path.join(
-                    "/data/rbg/scratch/lung_ct", segdir, segfile
+                    "/path/to/local/cache/lung_ct", segdir, segfile
                 )
         nifti_files = {}
-        for nifti_file in os.listdir("/data/rbg/scratch/lung_ct/nlst_nifti/"):
+        for nifti_file in os.listdir("/path/to/local/cache/lung_ct/nlst_nifti/"):
             exam = nifti_file.split("_")[1].split(".")[0]
             exam = exam[:17] if len(exam) > 17 else exam
             nifti_files[exam] = os.path.join(
-                "/data/rbg/scratch/lung_ct/nlst_nifti/", nifti_file
+                "/path/to/local/cache/lung_ct/nlst_nifti/", nifti_file
             )
 
         # add exams with abnormalities
@@ -2420,7 +2420,7 @@ class NLST_Survival_Dataset2(NLST_Survival_Dataset):
         )
         segpath = None
         if examid in self.annotations_metadata["exams"]:
-            segpath = f"/data/rbg/scratch/lung_ct/nlst_abnormalities51_nnunet_sparse_segmentation/sample_{examid}.pt"
+            segpath = f"/path/to/local/cache/lung_ct/nlst_abnormalities51_nnunet_sparse_segmentation/sample_{examid}.pt"
 
         sample = {
             "split": split,
@@ -2449,7 +2449,7 @@ class NLST_Survival_Dataset2(NLST_Survival_Dataset):
             "has_annotation_and_future_cancer": int(
                 (segpath is not None) and (y == 1),
             ),
-            "lung_mask_path": f"/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{examid}.npy",
+            "lung_mask_path": f"/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{examid}.npy",
             "confidence_path": self.annotations_metadata["confidence_files"].get(
                 examid, None
             ),
@@ -2484,7 +2484,7 @@ class NLST_Survival_Dataset2(NLST_Survival_Dataset):
                 image = image.transpose(1, 2, 0)  # y, x, z
             else:
                 try:
-                    path = f"/data/rbg/scratch/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
+                    path = f"/path/to/local/cache/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
                     image = pydicom_to_nifti(
                         sample["paths"], path, save_nifti=True
                     )  # y, x, z
@@ -2537,7 +2537,7 @@ class NLST_Survival_Dataset2(NLST_Survival_Dataset):
         pid_series_key = "{}_{}".format(sample["pid"], sample["series"])
         if pid_series_key in self.nlst_luna25:
             segmentation = torch.load(
-                f"/data/rbg/scratch/lung_ct/nlst_luna25_sparse_segmentation/sample_{sample['exam']}.pt"
+                f"/path/to/local/cache/lung_ct/nlst_luna25_sparse_segmentation/sample_{sample['exam']}.pt"
             )
             sparse_segmentation = segmentation["sparse_segmentation"]
             nodule_volumes = segmentation["nodule_volumes"]
@@ -2767,7 +2767,7 @@ class NLST_Survival_Dataset2(NLST_Survival_Dataset):
                 )
             else:
                 examid = sample["exam"]
-            rve_sample = f"/data/rbg/scratch/nlst_rve2/{examid}.1.0"
+            rve_sample = f"/path/to/local/cache/nlst_rve2/{examid}.1.0"
             if not os.path.exists(rve_sample):
                 return
 
@@ -2808,7 +2808,7 @@ class NLST_Survival_Dataset2(NLST_Survival_Dataset):
                 image = self.process_image_default(image)
 
             # lung_mask = np.load(
-            #     "/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{}.npy".format(
+            #     "/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{}.npy".format(
             #         sample["exam"]
             #     )
             # )
@@ -3063,7 +3063,7 @@ class NLST_Nodule_Segmentation(NLST_Survival_Dataset2):
         )
         segpath = None
         if examid in self.annotations_metadata["exams"]:
-            segpath = f"/data/rbg/scratch/lung_ct/nlst_abnormalities51_nnunet_sparse_segmentation/sample_{examid}.pt"
+            segpath = f"/path/to/local/cache/lung_ct/nlst_abnormalities51_nnunet_sparse_segmentation/sample_{examid}.pt"
 
         sample = {
             "paths": sorted_img_paths,
@@ -3079,7 +3079,7 @@ class NLST_Nodule_Segmentation(NLST_Survival_Dataset2):
             + [series_dict["slice_thickness"]],
             "segmentation_path": segpath,
             "has_annotation": int(segpath is not None),
-            "lung_mask_path": f"/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{examid}.npy",
+            "lung_mask_path": f"/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{examid}.npy",
             "confidence_path": self.annotations_metadata["confidence_files"][examid],
         }
 
@@ -3102,7 +3102,7 @@ class NLST_Nodule_Segmentation(NLST_Survival_Dataset2):
                     image = image.transpose(1, 2, 0)  # y, x, z
                 except:
                     try:
-                        path = f"/data/rbg/scratch/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
+                        path = f"/path/to/local/cache/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
                         image = pydicom_to_nifti(
                             sample["paths"], path, save_nifti=True
                         )  # y, x, z
@@ -3111,7 +3111,7 @@ class NLST_Nodule_Segmentation(NLST_Survival_Dataset2):
                         return
             else:
                 try:
-                    path = f"/data/rbg/scratch/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
+                    path = f"/path/to/local/cache/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
                     image = pydicom_to_nifti(
                         sample["paths"], path, save_nifti=True
                     )  # y, x, z
@@ -3145,7 +3145,7 @@ class NLST_Nodule_Segmentation(NLST_Survival_Dataset2):
                 dtype=torch.float32,
             )
             lung_mask = np.load(
-                "/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{}.npy".format(
+                "/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{}.npy".format(
                     sample["exam"]
                 )
             )
@@ -3217,7 +3217,7 @@ class NLST_Nodule_Segmentation(NLST_Survival_Dataset2):
                 image = image.transpose(1, 2, 0)  # y, x, z
             except:
                 try:
-                    path = f"/data/rbg/scratch/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
+                    path = f"/path/to/local/cache/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
                     image = pydicom_to_nifti(
                         sample["paths"], path, save_nifti=True
                     )  # y, x, z
@@ -3226,7 +3226,7 @@ class NLST_Nodule_Segmentation(NLST_Survival_Dataset2):
                     return
         else:
             try:
-                path = f"/data/rbg/scratch/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
+                path = f"/path/to/local/cache/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
                 image = pydicom_to_nifti(
                     sample["paths"], path, save_nifti=True
                 )  # y, x, z
@@ -3243,7 +3243,7 @@ class NLST_Nodule_Segmentation(NLST_Survival_Dataset2):
         )
         # load the lung mask
         # lung_mask = np.load(
-        #     "/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{}.npy".format(
+        #     "/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{}.npy".format(
         #         sample["exam"]
         #     )
         # )
@@ -3467,8 +3467,8 @@ class NLST_Nodule_PreprocessedPatches_Segmentation(NLST_Nodule_Segmentation):
                     "num_original_slices": len(series_dict["paths"]),
                     "pixel_spacing": series_dict["pixel_spacing"]
                     + [series_dict["slice_thickness"]],
-                    "segmentation_path": f"/data/rbg/scratch/lung_ct/nlst_abnormalities51_patches/{examid}_nodule{nid}.pt",
-                    "lung_mask_path": f"/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{examid}.npy",
+                    "segmentation_path": f"/path/to/local/cache/lung_ct/nlst_abnormalities51_patches/{examid}_nodule{nid}.pt",
+                    "lung_mask_path": f"/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{examid}.npy",
                 }
             )
 
@@ -3553,7 +3553,7 @@ class NLST_LUNA25(NLST_Survival_Dataset2):
             samples.append(
                 {
                     "split": split,
-                    "path": "/data/rbg/scratch/lung_ct/nlst_luna25_patches/{}_{}_{}.npy".format(
+                    "path": "/path/to/local/cache/lung_ct/nlst_luna25_patches/{}_{}_{}.npy".format(
                         pid, series_id, nid
                     ),
                     "y": int(y),
@@ -3577,7 +3577,7 @@ class NLST_LUNA25(NLST_Survival_Dataset2):
                     )
                 else:
                     examid = sample["exam"].split("-")[0]
-                rve_sample = f"/data/rbg/scratch/nlst_rve2/{examid}.1.0"
+                rve_sample = f"/path/to/local/cache/nlst_rve2/{examid}.1.0"
                 if not os.path.exists(rve_sample):
                     return
 
@@ -3727,7 +3727,7 @@ class NLST_Sparse_Confidence(NLST_Survival_Dataset2):
         )
         segpath = None
         if examid in self.annotations_metadata["exams"]:
-            segpath = f"/data/rbg/scratch/lung_ct/nlst_abnormalities51_nnunet_sparse_segmentation/sample_{examid}.pt"
+            segpath = f"/path/to/local/cache/lung_ct/nlst_abnormalities51_nnunet_sparse_segmentation/sample_{examid}.pt"
 
         sample = {
             "paths": sorted_img_paths,
@@ -3743,7 +3743,7 @@ class NLST_Sparse_Confidence(NLST_Survival_Dataset2):
             + [series_dict["slice_thickness"]],
             "segmentation_path": segpath,
             "has_annotation": int(segpath is not None),
-            "lung_mask_path": f"/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{examid}.npy",
+            "lung_mask_path": f"/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{examid}.npy",
         }
 
         if self.args.use_risk_factors:
@@ -3760,7 +3760,7 @@ class NLST_Sparse_Confidence(NLST_Survival_Dataset2):
             # load the nifti if it exists, otherwise convert from dicom
             # path = self.annotations_metadata["nifti_files"].get(sample["exam"], None)
             path = (
-                f"/data/rbg/scratch/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
+                f"/path/to/local/cache/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
             )
             if path is not None:
                 try:
@@ -3769,7 +3769,7 @@ class NLST_Sparse_Confidence(NLST_Survival_Dataset2):
                     image = image.transpose(1, 2, 0)  # y, x, z
                 except:
                     try:
-                        path = f"/data/rbg/scratch/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
+                        path = f"/path/to/local/cache/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
                         image = pydicom_to_nifti(
                             sample["paths"], path, save_nifti=True
                         )  # y, x, z
@@ -3778,7 +3778,7 @@ class NLST_Sparse_Confidence(NLST_Survival_Dataset2):
                         return
             else:
                 try:
-                    path = f"/data/rbg/scratch/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
+                    path = f"/path/to/local/cache/lung_ct/nlst_nifti/sample_{sample['exam']}.nii.gz"
                     image = pydicom_to_nifti(
                         sample["paths"], path, save_nifti=True
                     )  # y, x, z
@@ -3887,7 +3887,7 @@ class NLST_Sparse_Confidence(NLST_Survival_Dataset2):
 class NLST_Sparse_Confidence_SybilTest(NLST_Sparse_Confidence):
     def __init__(self, args, split_group):
         self.sybil_test_exams = set(
-            os.listdir("/data/rbg/scratch/lung_ct/sybil15_nlst_test_hiddens/")
+            os.listdir("/path/to/local/cache/lung_ct/sybil15_nlst_test_hiddens/")
         )
         super().__init__(args, split_group)
 
@@ -3935,7 +3935,7 @@ class NLST_Sparse_Confidence_SybilTest(NLST_Sparse_Confidence):
             series_id.split(".")[-1][-5:],
         )
 
-        segpath = f"/data/rbg/scratch/lung_ct/nlst_abnormalities51_nnunet_sparse_segmentation/sample_{examid}.pt"
+        segpath = f"/path/to/local/cache/lung_ct/nlst_abnormalities51_nnunet_sparse_segmentation/sample_{examid}.pt"
 
         sample = {
             "paths": sorted_img_paths,
@@ -3951,7 +3951,7 @@ class NLST_Sparse_Confidence_SybilTest(NLST_Sparse_Confidence):
             + [series_dict["slice_thickness"]],
             "segmentation_path": segpath,
             "has_annotation": int(segpath is not None),
-            "lung_mask_path": f"/data/rbg/scratch/lung_ct/nlst_lung_mask/sample_{examid}.npy",
+            "lung_mask_path": f"/path/to/local/cache/lung_ct/nlst_lung_mask/sample_{examid}.npy",
         }
 
         return sample
@@ -3971,7 +3971,7 @@ class NLST_Longitudinal(NLST_Survival_Dataset2):
             self.assign_splits(self.metadata_json)
 
         test_hiddens = set(
-            os.listdir("/data/rbg/scratch/lung_ct/sybil15_nlst_test_hiddens/")
+            os.listdir("/path/to/local/cache/lung_ct/sybil15_nlst_test_hiddens/")
         )
         if split_group == "test":
             pid_tracked_nodules_path = "/data/rbg/users/pgmikhael/current/Sybil/notebooks/NLSTNodules/pid2tracked_nodules_test.p"
@@ -4413,9 +4413,9 @@ class NLST_Longitudinal(NLST_Survival_Dataset2):
 
         try:
             if self.split_group == "test":
-                sybil15_dir = "/data/rbg/scratch/lung_ct/sybil15_nlst_test_hiddens/"
+                sybil15_dir = "/path/to/local/cache/lung_ct/sybil15_nlst_test_hiddens/"
             else:
-                sybil15_dir = "/data/rbg/scratch/lung_ct/sybil15_nlst_hiddens_rve2/"
+                sybil15_dir = "/path/to/local/cache/lung_ct/sybil15_nlst_hiddens_rve2/"
             image_embedding = torch.load(
                 f"{sybil15_dir}/sample_{sample['exam']}.predictions",
                 weights_only=False,
@@ -4472,7 +4472,7 @@ class NLST_Longitudinal(NLST_Survival_Dataset2):
                 nodules_found = []
                 for i, nid in enumerate(old_nodule_ids):
                     if not os.path.exists(
-                        f"/data/rbg/scratch/lung_ct/nlst_abnormalities51_test_patches/{sample['exam']}_nodule{nid}.pt"
+                        f"/path/to/local/cache/lung_ct/nlst_abnormalities51_test_patches/{sample['exam']}_nodule{nid}.pt"
                     ):
                         # print(f"Missing patch for {sample['exam']}_nodule{nid}")
                         # print("OLD IDS", old_nodule_ids)
@@ -4481,7 +4481,7 @@ class NLST_Longitudinal(NLST_Survival_Dataset2):
                         continue
 
                     patch = torch.load(
-                        f"/data/rbg/scratch/lung_ct/nlst_abnormalities51_test_patches/{sample['exam']}_nodule{nid}.pt",
+                        f"/path/to/local/cache/lung_ct/nlst_abnormalities51_test_patches/{sample['exam']}_nodule{nid}.pt",
                         weights_only=False,
                     )
                     patch = self.process_nodule_patch(patch)
