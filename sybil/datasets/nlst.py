@@ -36,9 +36,9 @@ import rve
 
 warnings.filterwarnings("ignore")
 
-GOOGLE_SPLITS_FILENAME = "/data/rbg/shared/projects/sybil/google_data_splits.p"
+GOOGLE_SPLITS_FILENAME = "/path/to/local/cache/sybil/google_data_splits.p"
 
-CORRUPTED_PATHS = "/data/rbg/shared/datasets/NLST/NLST/corrupted_img_paths.pkl"
+CORRUPTED_PATHS = "/path/to/local/cache/NLST/corrupted_img_paths.pkl"
 
 CT_ITEM_KEYS = [
     "pid",
@@ -112,10 +112,10 @@ ANATOMICAL_WINDOWS = {
     }
 }
 
-PID2DICOM_DIRECTORY = pickle.load(
-    open("/data/rbg/shared/datasets/NLST/NLST/all_nlst_dicoms_pid2directory.p", "rb")
-)
-
+if os.path.exists("/path/to/local/cache/NLST/all_nlst_dicoms_pid2directory.p"):
+    PID2DICOM_DIRECTORY = pickle.load(
+        open("/path/to/local/cache/NLST/all_nlst_dicoms_pid2directory.p", "rb")
+    )
 
 def get_examid(pid, timepoint, series_id):
     return "{}{}{}{}".format(
@@ -124,7 +124,6 @@ def get_examid(pid, timepoint, series_id):
         series_id.split(".")[-1][:5],
         series_id.split(".")[-1][-5:],
     )
-
 
 
 class NLST_Survival_Dataset(data.Dataset):
@@ -1648,7 +1647,7 @@ class NLST_PidsWithAbnormalitiesForNnUNet(NLST_PidsWithAbnormalities):
     def create_dataset(self, split_group):
         series_to_use = pickle.load(
             open(
-                "/data/rbg/users/pgmikhael/current/Sybil/notebooks/pid2series.p",
+                "/path/to/local/cache/pid2series.p",
                 "rb",
             )
         )
@@ -1735,7 +1734,7 @@ class NLST_PidsWithAbnormalitiesForNnUNet(NLST_PidsWithAbnormalities):
 class NLST_LUNA25_Annotated_Cancers_ForNnUNet(NLST_PidsWithAbnormalitiesForNnUNet):
     def create_dataset(self, split_group):
         self.nlst_luna25 = pd.read_csv(
-            "/data/rbg/shared/datasets/NLST/NLST/LUNA25_Public_Training_Development_Data.csv"
+            "/path/to/local/cache/NLST/LUNA25_Public_Training_Development_Data.csv"
         )
         nlst_luna25_series = list(self.nlst_luna25["SeriesInstanceUID"])
         annotated_cancers = list(self.annotations_metadata.keys())
@@ -1822,7 +1821,7 @@ class NLST_TestSet_ForNnUNet(NLST_PidsWithAbnormalitiesForNnUNet):
     def create_dataset(self, split_group):
         test_dataset = pickle.load(
             open(
-                "/data/rbg/users/pgmikhael/current/notebooks/LungCT/Sybil/ResultsDir/nlst_dataset.p",
+                "/path/to/local/cache/nlst_dataset.p",
                 "rb",
             )
         )["test"]
@@ -1918,7 +1917,7 @@ class NLST_SegmentationProcessing(NLST_Survival_Dataset):
 
     def create_dataset(self, split_group):
         nlst_luna25 = pd.read_csv(
-            "/data/rbg/shared/datasets/NLST/NLST/LUNA25_Public_Training_Development_Data.csv"
+            "/path/to/local/cache/NLST/LUNA25_Public_Training_Development_Data.csv"
         ).to_dict(orient="records")
         nlst_luna25_records = defaultdict(list)
         for row in nlst_luna25:
@@ -2198,7 +2197,7 @@ class NLST_Survival_Dataset2(NLST_Survival_Dataset):
             )
             self.nlst_luna25 = pickle.load(
                 open(
-                    "/data/rbg/users/pgmikhael/current/Sybil/notebooks/NoduleGrowth/luna25_nlst_segmentation_dataset.p",
+                    "/path/to/local/cache/luna25_nlst_segmentation_dataset.p",
                     "rb",
                 )
             )
@@ -3397,7 +3396,7 @@ class NLST_Nodule_PreprocessedPatches_Segmentation(NLST_Nodule_Segmentation):
 
         self.exam_to_cached_nodules = pickle.load(
             open(
-                "/data/rbg/shared/datasets/NLST/NLST/nlst_exam_to_nodules_abn51.p", "rb"
+                "/path/to/local/cache/NLST/nlst_exam_to_nodules_abn51.p", "rb"
             )
         )
         self.dataset = self.create_dataset(split_group)
@@ -3974,9 +3973,9 @@ class NLST_Longitudinal(NLST_Survival_Dataset2):
             os.listdir("/path/to/local/cache/lung_ct/sybil15_nlst_test_hiddens/")
         )
         if split_group == "test":
-            pid_tracked_nodules_path = "/data/rbg/users/pgmikhael/current/Sybil/notebooks/NLSTNodules/pid2tracked_nodules_test.p"
+            pid_tracked_nodules_path = "/path/to/local/cache/pid2tracked_nodules_test.p"
         else:
-            pid_tracked_nodules_path = "/data/rbg/users/pgmikhael/current/Sybil/notebooks/NLSTNodules/pid2tracked_nodules.p"
+            pid_tracked_nodules_path = "/path/to/local/cache/pid2tracked_nodules.p"
 
         pid_tracked_nodules = pickle.load(
             open(
@@ -4685,7 +4684,7 @@ class NLST_Longitudinal(NLST_Survival_Dataset2):
 class NLSTSybilTest(NLST_Longitudinal):
     test_dataset = pickle.load(
         open(
-            "/data/rbg/users/pgmikhael/current/notebooks/LungCT/Sybil/ResultsDir/nlst_dataset.p",
+            "/path/to/local/cache/nlst_dataset.p",
             "rb",
         )
     )["test"]
@@ -4706,7 +4705,7 @@ class NLSTSybilTest(NLST_Longitudinal):
 
         pid_tracked_nodules = pickle.load(
             open(
-                "/data/rbg/users/pgmikhael/current/Sybil/notebooks/NLSTNodules/pid2tracked_nodules.p",
+                "/path/to/local/cache/NLSTNodules/pid2tracked_nodules.p",
                 "rb",
             )
         )
