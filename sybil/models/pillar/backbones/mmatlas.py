@@ -97,11 +97,12 @@ class MultimodalAtlas(nn.Module):
         super().__init__()
         self.args = args
 
-        # Load model-specific config and setup device
-        # self.device = setup_device(device)
-        self.model_repo_id = model_repo_id
-        self.model_revision = model_revision
-        self.pretrained = pretrained
+        # Hardcoded to the public atlas release. The original private repo was
+        # swapped out, and the signature kwargs are kept only so that checkpoints
+        # whose args.model["kwargs"] still carry these fields keep loading.
+        self.model_repo_id = "YalaLab/Pillar0-ChestCT"
+        self.model_revision = "main"
+        self.pretrained = True
 
         # Setup model
         self.setup_model()

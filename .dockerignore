@@ -1,0 +1,13 @@
+.git
+.tox
+__pycache__
+*.pyc
+*.egg-info
+dist
+build
+docs
+examples
+tests
+*.ipynb
+.env
+CLAUDE.md
