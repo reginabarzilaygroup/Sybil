@@ -245,5 +245,5 @@ class PillarLoader(abstract_loader):
             apply_pillar_windowing(image, window["center"], window["width"])
             for bodypart, window in self.anatomical_windows["CT"].items()
         ] + [minmax]
-        image = torch.concat(image, 0)  #  channels, y, x, z
+        image = torch.concat(image, 0)  # (C, D, H, W)
         return image
