@@ -187,14 +187,13 @@ class Sybil17(nn.Module):
         super().__init__()
         self.args = args
         self.precomputed_pillar_hiddens = args.precomputed_pillar_hiddens
-        # self._load_pillar_model(args)
         self._load_nodule_model(args, args.nodule_classifier_ckpt)
         self._load_diff_net(args, args.diffnet_ckpt)
 
-    def _load_pillar_model(self, args):
+    def _load_pillar_model(self, args, ckpt_path):
         self.pillar_model = MultiStage(args)
         checkpoint = torch.load(
-            args.pillar_ckpt,
+            ckpt_path,
             map_location="cpu",
             weights_only=False,
         )

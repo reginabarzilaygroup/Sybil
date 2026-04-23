@@ -96,7 +96,7 @@ CHECKPOINT_URL = os.getenv(
 )
 CHECKPOINT2_URL = os.getenv(
     "SYBIL_CHECKPOINT2_URL",
-    "https://zenodo.org/records/19323196/files/sybil2_checkpoints.zip",
+    "https://zenodo.org/records/19378950/files/sybil2_checkpoints.zip",
 )
 
 
@@ -276,7 +276,7 @@ class Sybil:
             Pretrained Sybil model
         """
         # Load checkpoint
-        checkpoint = torch.load(path, map_location="cpu")
+        checkpoint = torch.load(path, weights_only=False, map_location="cpu")
         args = checkpoint["args"]
         self._max_followup = args.max_followup
         self._censoring_dist = args.censoring_distribution
@@ -530,6 +530,7 @@ class Sybil:
 class Sybil2:
     def __init__(
         self,
+        name_or_path: str = "sybil2",
         cache: str = "~/.sybil/",
         device: Optional[str] = None,
     ):
@@ -598,7 +599,7 @@ class Sybil2:
         model = Sybil17(args)
         model.load_state_dict(state_dict)
         # add pillar model here becasue it was not trained with model and is not in state_dict
-        model._load_pillar_model(args['pillar_ft_args'])
+        model._load_pillar_model(checkpoint['pillar_ft_args'], pillar_path)
         model.eval()
         logger.debug("Initialized Sybil2 malignancy model")
         if self.device is not None:
@@ -829,7 +830,7 @@ class Sybil2:
             # step 4: create input for confidence model
             # NOTE: reference_files/generate_predictions_for_confidence_model.py
             # prepare_for_* functions expect (H, W, D) image on CPU
-            ct_hwz = segmentation_volume.squeeze().cpu().permute(1, 2, 0)  # (H, W, D)
+            ct_hwz = segmentation_volume.squeeze(0).squeeze(0).cpu().permute(1, 2, 0)  # (H, W, D)
             confidence_input = serie.prepare_for_confidence_model(
                 sparse_seg, ct_hwz, combined_seg.cpu(), crop_size=(128, 128, 32)
             )
@@ -873,8 +874,6 @@ class Sybil2:
             x.append(pillar_output["pillar_features"])
             logit.append(pillar_output["pillar_risk"])
 
-            # store per-nid patches so they can be assembled in track order below
-            # permute patches from (H, W, D) -> (D, H, W) to match nodule model input convention
             patch_ids = sparse_seg.values().unique()
             patch_ids = patch_ids[patch_ids > 0]
             tp_nodule_patches = {
@@ -1263,7 +1262,7 @@ class Sybil2:
                 )
 
                 # lung mask
-                lung_mask = self.lung_mask_model.apply(lungmask_volume.numpy())
+                lung_mask = self.lung_mask_model.apply(lungmask_volume)
 
                 # nodule segmentation
                 seg_out = self.segmentation_model.predict(
@@ -1281,8 +1280,8 @@ class Sybil2:
                 lung_mask_t = F.interpolate(
                     lung_mask_t.unsqueeze(1), size=(1024, 1024), mode="nearest"
                 )
-                lung_mask_t = lung_mask_t.squeeze(1).to(self.device)
-                lung_mask_t = (lung_mask_t > 0).float()
+                lung_mask_t = lung_mask_t.squeeze(1)
+                lung_mask_t = (lung_mask_t > 0).float().to(self.device)
 
                 combined_seg = (
                     (nodule_seg * lung_mask_t).float().squeeze(0)
@@ -1321,25 +1320,14 @@ class Sybil2:
                 ).coalesce()
 
                 # (H, W, D) CPU image for confidence/malignancy models
-                ct_hwz = segmentation_volume.squeeze().cpu().permute(1, 2, 0)
+                ct_hwz = segmentation_volume.squeeze(0).squeeze(0).cpu().permute(1, 2, 0)
 
                 # collect confidence patches for batched inference in Phase 2
                 confidence_input = serie.prepare_for_confidence_model(
-                    sparse_seg, ct_hwz, combined_seg.cpu()
+                    sparse_seg, ct_hwz, combined_seg.cpu(), crop_size=(128, 128, 32)
                 )
                 patch_map.append((patient_idx, timepoint, confidence_input.shape[0]))
                 all_patches.append(confidence_input)
-
-                # malignancy patches — permute (H,W,D) → (D,H,W) per patch
-                malignancy_input = serie.prepare_for_malignancy_model(
-                    sparse_seg, ct_hwz
-                )
-                patch_ids = sparse_seg.values().unique()
-                patch_ids = patch_ids[patch_ids > 0]
-                nodule_patches = {
-                    nid.item(): malignancy_input[i].permute(2, 0, 1)
-                    for i, nid in enumerate(patch_ids)
-                }
 
                 # pillar forward
                 pillar_output = self.model.pillar_forward(
@@ -1353,8 +1341,9 @@ class Sybil2:
                     "sparse_seg": sparse_seg,
                     "nodule_ids": valid_ids,
                     "nodule_volumes": valid_vols,
-                    "nodule_patches": nodule_patches,
+                    "ct_hwz": ct_hwz,
                     # "nodule_confidence" filled during Phase 2
+                    # "nodule_patches" filled during Phase 3
                 }
 
             inter[patient_idx] = {
@@ -1370,21 +1359,23 @@ class Sybil2:
         # --------------------------------------------------------------
         if all_patches:
             batch_patches = torch.cat(all_patches, dim=0)
-            if self.device is not None:
-                batch_patches = batch_patches.to(self.device)
-            confidence_scores = (
-                self.confidence_model(batch_patches)["logit"][:, 1].sigmoid().cpu()
-            )
-
-            offset = 0
-            for patient_idx, timepoint, n_patches in patch_map:
-                if inter[patient_idx] is None:
-                    offset += n_patches
-                    continue
-                inter[patient_idx]["tp_data"][timepoint]["nodule_confidence"] = (
-                    confidence_scores[offset : offset + n_patches]
+            if batch_patches.shape[0] > 0:
+                if self.device is not None:
+                    batch_patches = batch_patches.to(self.device)
+                confidence_scores = (
+                    torch.softmax(self.confidence_model(batch_patches)["logit"], -1)[:, -1]
+                    .cpu()
                 )
-                offset += n_patches
+
+                offset = 0
+                for patient_idx, timepoint, n_patches in patch_map:
+                    if inter[patient_idx] is None:
+                        offset += n_patches
+                        continue
+                    inter[patient_idx]["tp_data"][timepoint]["nodule_confidence"] = (
+                        confidence_scores[offset : offset + n_patches]
+                    )
+                    offset += n_patches
 
         # --------------------------------------------------------------
         # Phase 3: registration + nodule tracking + input assembly
@@ -1419,6 +1410,17 @@ class Sybil2:
                 else:
                     tp_info["nodule_confidence"] = conf
 
+                # compute malignancy patches on the truncated sparse_seg (matches single path)
+                malignancy_input = serie.prepare_for_malignancy_model(
+                    tp_info["sparse_seg"], tp_info["ct_hwz"], crop_size=(128, 128, 32)
+                )
+                patch_ids = tp_info["sparse_seg"].values().unique()
+                patch_ids = patch_ids[patch_ids > 0]
+                tp_info["nodule_patches"] = {
+                    nid.item(): malignancy_input[i]
+                    for i, nid in enumerate(patch_ids)
+                }
+
             # build tp2nodules
             tp2nodules: Dict[Any, List] = {}
             for tp, tp_info in tp_data.items():
@@ -1426,8 +1428,6 @@ class Sybil2:
                 nodule_list = []
                 for nid, vol in zip(tp_info["nodule_ids"], tp_info["nodule_volumes"]):
                     mask = sparse_seg.values() == nid
-                    if not mask.any():
-                        continue
                     ys, xs, zs = sparse_seg.indices()[:, mask]
                     ymin, ymax = ys.min().item() // 2, ys.max().item() // 2
                     xmin, xmax = xs.min().item() // 2, xs.max().item() // 2
@@ -1478,6 +1478,7 @@ class Sybil2:
 
         return results
 
+    @torch.inference_mode()
     def predict_dataset(
         self,
         dataset: Union["SybilV2Dataset", str],  # noqa: F821
@@ -1606,7 +1607,7 @@ class Sybil2:
                     .cpu()
                     .numpy()
                 )
-                calib = self._calibrate(np.array([score.tolist()])).tolist()
+                calib = self._calibrate(score[None]).tolist()
 
                 result: Dict[str, Any] = {
                     "patient_id": meta["patient_id"],
