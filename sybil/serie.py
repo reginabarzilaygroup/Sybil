@@ -19,7 +19,12 @@ from sybil.utils.dicom_to_nifti import read_with_sitk
 
 
 def _pad_axis(lo: int, hi: int, min_size: int, max_size: int):
-    """Symmetrically expand [lo, hi+1) to at least min_size, clamped to [0, max_size]."""
+    """Symmetrically expand [lo, hi+1) toward min_size, clamped to [0, max_size].
+
+    The returned span may be shorter than min_size when the box butts up against
+    0 or max_size; callers that need an exact target size should follow up with
+    ResizeWithPadOrCrop.
+    """
     size = hi - lo + 1
     pad = max(0, min_size - size)
     lo = max(0, lo - pad // 2)
@@ -486,9 +491,12 @@ class Serie:
         Returns
         -------
         torch.Tensor
-            Shape (N_nodules, 2, H_crop, W_crop, D_crop).
+            Shape (N_nodules, 2, D_crop, H_crop, W_crop).
         """
-        H_CROP, W_CROP, D_CROP = (128, 128, 10) 
+        # bbox-expansion minimums; deliberately smaller than crop_size on the
+        # z-axis so nodules that span only a few slices aren't stretched before
+        # ResizeWithPadOrCrop pads them to crop_size.
+        H_CROP, W_CROP, D_CROP = (128, 128, 10)
         resize_with_pad_or_crop = ResizeWithPadOrCrop(spatial_size=crop_size)
         scale_intensity = ScaleIntensity()
 
@@ -514,12 +522,23 @@ class Serie:
 
             patchx = image[y1:y2, x1:x2, z1:z2]  # (H_crop, W_crop, D_crop)
 
-            # place nodule probability into a zero canvas, then crop
-            patch_seg = torch.zeros(img_h, img_w, img_d, dtype=nodule_mask.dtype)
-            patch_seg[ymin : ymax + 1, xmin : xmax + 1, zmin : zmax + 1] = nodule_mask[
+            # place nodule probability into a zero canvas sized to the padded
+            # bbox only, then write the nodule mask at its offset within it.
+            # Original (kept for reference) allocated the full CT volume each
+            # iteration and sliced out this same region:
+            # patch_seg = torch.zeros(img_h, img_w, img_d, dtype=nodule_mask.dtype)
+            # patch_seg[ymin : ymax + 1, xmin : xmax + 1, zmin : zmax + 1] = nodule_mask[
+            #     zmin : zmax + 1, ymin : ymax + 1, xmin : xmax + 1
+            # ].permute(1, 2, 0)
+            # patchl = patch_seg[y1:y2, x1:x2, z1:z2]
+            patchl = torch.zeros(y2 - y1, x2 - x1, z2 - z1, dtype=nodule_mask.dtype)
+            dy0, dx0, dz0 = ymin - y1, xmin - x1, zmin - z1
+            dy1 = dy0 + (ymax + 1 - ymin)
+            dx1 = dx0 + (xmax + 1 - xmin)
+            dz1 = dz0 + (zmax + 1 - zmin)
+            patchl[dy0:dy1, dx0:dx1, dz0:dz1] = nodule_mask[
                 zmin : zmax + 1, ymin : ymax + 1, xmin : xmax + 1
             ].permute(1, 2, 0)
-            patchl = patch_seg[y1:y2, x1:x2, z1:z2]
 
             patchx = scale_intensity(resize_with_pad_or_crop(patchx.unsqueeze(0))).squeeze(0)
             patchl = resize_with_pad_or_crop(patchl.unsqueeze(0)).squeeze(0)
@@ -527,9 +546,11 @@ class Serie:
             patches.append(torch.stack([patchx, patchl]))  # (2, H_crop, W_crop, D_crop)
 
         if patches:
-            return torch.stack(patches)  # (N, 2, H_crop, W_crop, D_crop)
-        patches = patches.permuted(0, 1, 4, 2, 3)  # (N, 2, D_crop, H_crop, W_crop)
-        return torch.zeros(0, 2, H_CROP, W_CROP, D_CROP)
+            patches = torch.stack(patches)
+            patches = patches.permute(0, 1, 4, 2, 3)
+            return patches  # (N, 2, D_crop, H_crop, W_crop)
+        else:
+            return torch.zeros(0, 2, crop_size[2], crop_size[0], crop_size[1])
 
     def prepare_for_malignancy_model(
         self,
@@ -551,7 +572,7 @@ class Serie:
         Returns
         -------
         torch.Tensor
-            Shape (N_nodules, H_crop, W_crop, D_crop).
+            Shape (N_nodules, D_crop, H_crop, W_crop).
         """
         H_CROP, W_CROP, D_CROP = crop_size
         resize_with_pad_or_crop = ResizeWithPadOrCrop(spatial_size=crop_size)
