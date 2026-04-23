@@ -145,3 +145,6 @@ Thumbs.db
 
 # logs
 logs/*
+
+# pytest
+test_preprocess_local.py

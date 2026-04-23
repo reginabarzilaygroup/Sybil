@@ -1,6 +1,6 @@
 # Sybil
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pgmikhael/Sybil/blob/main/LICENSE.txt) ![version](https://img.shields.io/badge/version-1.7.1-success)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pgmikhael/Sybil/blob/main/LICENSE.txt) ![version](https://img.shields.io/badge/version-1.7.2-success)
 
 Lung Cancer Risk Prediction.
 
@@ -51,27 +51,35 @@ Sybil-2 is a new version of the Sybil model that can ingest multiple scans and p
 
 ### Environment
 
-1. Create a new conda environment and install the dependencies from the `environment-v2.yaml` file.
+The project uses [uv](https://docs.astral.sh/uv/) for dependency management. The pinned `uv.lock` is the single source of truth for versions; it targets Linux x86_64 with CUDA.
+
+1. Install uv:
 
 ```sh
-mamba env create -f environment-v2.yaml
-mamba activate sybil2
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-1. Install the Rad Vision Engine dependency:
+2. Create the venv and install Sybil v2 dependencies. `rad-vision-engine` is already declared as a git source in `pyproject.toml`, so `uv sync` pulls it automatically — no separate clone step:
 
 ```sh
-git clone https://github.com/yalalab/rad-vision-engine ../rad-vision-engine
-cd ../rad-vision-engine && git checkout release
-pip install -e ../rad-vision-engine
+uv sync --extra v2
 ```
 
-2. Download the Pillar model checkpoint from [YalaLab/Pillar0-Sybil-1.5](https://huggingface.co/YalaLab/Pillar0-Sybil-1.5) and save it as `pillar_seed0_epoch=2.ckpt` in the Sybil cache directory (default: `~/.sybil/`):
+3. Install `torch-scatter`. It's not in the lock file because it ships CUDA-specific prebuilt wheels from PyG that aren't indexed on PyPI; the URL must match the pinned torch version (2.7.1+cu126):
 
 ```sh
-# example using huggingface-hub
+uv pip install torch-scatter -f https://data.pyg.org/whl/torch-2.7.1+cu126.html
+```
+
+4. Download the Pillar model checkpoint from [YalaLab/Pillar0-Sybil-1.5](https://huggingface.co/YalaLab/Pillar0-Sybil-1.5) and save it as `pillar_seed0_epoch=2.ckpt` in the Sybil cache directory (default: `~/.sybil/`). The Sybil2 core checkpoints will be downloaded automatically on first use:
+
+```sh
 huggingface-cli download YalaLab/Pillar0-Sybil-1.5 pillar_seed0_epoch=2.ckpt --local-dir ~/.sybil/
 ```
+
+Activate the venv with `source .venv/bin/activate`, or run commands through `uv run <command>`.
+
+Alternatively, use the pre-built Docker image — see `Dockerfile` and `docs/docker_guide.md`. The image includes all dependencies and bakes in the checkpoints.
 
 ### Run the model on a single exam
 
@@ -104,16 +112,16 @@ Each row is one CT scan (timepoint) for a patient. Multiple rows with the same
 | column | required | description |
 | --- | --- | --- |
 | `patient_id` | ✓ | Unique patient identifier |
-| `timepoint` | ✓ | Scan identifier, e.g. `"baseline"`, `"year1"`, or an integer |
+| `timepoint` | ✓ | Integer ordering the scans chronologically (e.g. `0` for baseline, `1` for the first followup) |
 | `ct_dir` | ✓ | Path to the directory containing the DICOM files for that scan |
 | `label` | | Cancer label (0 / 1) |
 | `censor_time` | | Years to cancer diagnosis (required when `label` is provided) |
 
 ```csv
 patient_id,timepoint,ct_dir
-P001,baseline,/data/P001/scan_2018
-P001,followup,/data/P001/scan_2019
-P002,baseline,/data/P002/scan_2020
+P001,0,/data/P001/scan_2018
+P001,1,/data/P001/scan_2019
+P002,0,/data/P002/scan_2020
 ```
 
 #### Single-GPU

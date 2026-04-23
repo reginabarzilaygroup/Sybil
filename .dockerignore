@@ -11,3 +11,4 @@ tests
 *.ipynb
 .env
 CLAUDE.md
+test_preprocess_local.py

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sybil"
-version = "1.7.1"
+version = "1.7.2"
 description = "Sybil: lung cancer risk prediction"
 readme = "README.md"
 license = {file = "LICENSE.txt"}
@@ -25,9 +25,12 @@ dependencies = [
     "pillow>=10.2.0",
     "pydicom>=2.3",
     "pylibjpeg[all]>=2.0",
-    "torch>=2.0",
+    # Pinned to 2.7.1+cu126 to match the tested local environment and because
+    # torch 2.11 + cu130 requires NVIDIA driver ≥ 580, which isn't universally
+    # available. The CUDA variant is selected via [tool.uv.sources] below.
+    "torch==2.7.1",
     "torchio>=0.18",
-    "torchvision>=0.15",
+    "torchvision==0.22.1",
     "tqdm>=4.62",
     "loguru>=0.7",
 ]
@@ -53,9 +56,16 @@ v2 = [
     "scikit-learn>=1.4",
     "scipy>=1.12",
     "simpleitk>=2.5",
-    # torch-scatter: installed separately via find-links (CUDA-specific wheels)
-    # uv pip install torch-scatter -f https://data.pyg.org/whl/torch-2.7.0+cu126.html
-    "transformers>=4.40",
+    # torch-scatter: installed separately via find-links (CUDA-specific wheels).
+    # The URL must match the pinned torch version (2.7.1) and its CUDA variant (cu126).
+    # A mismatch either segfaults at import or raises "PyTorch and torch_scatter
+    # were compiled with different CUDA versions" at the first call.
+    # uv pip install torch-scatter -f https://data.pyg.org/whl/torch-2.7.1+cu126.html
+    # Upper bound at <5: transformers 5.x refactored the weight-tying API
+    # (all_tied_weights_keys vs _tied_weights_keys), which breaks custom models
+    # loaded via trust_remote_code that were written against 4.x — notably the
+    # YalaLab/Pillar0-ChestCT atlas backbone.
+    "transformers>=4.40,<5",
     "pyyaml>=6.0",
 ]
 train = [
@@ -84,8 +94,15 @@ environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
 [tool.uv.sources]
 rad-vision-engine = { git = "https://github.com/YalaLab/rave", branch = "main" }
+torch = { index = "pytorch-cu126" }
+torchvision = { index = "pytorch-cu126" }
 
 [tool.setuptools]
 packages = {find = {exclude = ["tests"]}}
