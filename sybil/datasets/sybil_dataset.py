@@ -1,11 +1,13 @@
 """
 Dataset for Sybil v2 inference from a CSV manifest.
 
-CSV columns (required):  patient_id, timepoint, ct_dir
+CSV columns (required):  patient_id, timepoint (int), ct_dir
 CSV columns (optional):  label, censor_time
 
 Each row is one CT scan (one timepoint) for a patient.  Multiple rows with
 the same ``patient_id`` are collected into a single multi-timepoint Serie.
+``timepoint`` must be an integer ordering the scans chronologically
+(e.g. ``0`` for baseline, ``1`` for the first followup).
 """
 
 import glob
@@ -32,7 +34,8 @@ class SybilV2Dataset(Dataset):
     ----------
     csv_path : str
         Path to the CSV file.  Must contain columns ``patient_id``,
-        ``timepoint``, and ``ct_dir``.  Optional columns ``label`` (0/1) and
+        ``timepoint`` (int ordering scans chronologically, e.g. ``0`` for
+        baseline), and ``ct_dir``.  Optional columns ``label`` (0/1) and
         ``censor_time`` (int, years) enable labelled mode.
     cache_dir : str
         Directory for intermediate NIfTI files required by the v2 pipeline.
@@ -76,10 +79,17 @@ class SybilV2Dataset(Dataset):
     def _build_samples(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         samples: List[Dict[str, Any]] = []
         for patient_id, group in df.groupby("patient_id", sort=False):
-            timepoint_paths: Dict[str, List[str]] = {}
+            timepoint_paths: Dict[int, List[str]] = {}
 
             for _, row in group.iterrows():
                 ct_dir = str(row["ct_dir"])
+                try:
+                    timepoint = int(row["timepoint"])
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"timepoint must be an integer, got {row['timepoint']!r} "
+                        f"for patient {patient_id} (ct_dir={ct_dir})"
+                    )
                 if not os.path.isdir(ct_dir):
                     logger.warning(f"CT directory not found, skipping: {ct_dir}")
                     continue
@@ -91,7 +101,7 @@ class SybilV2Dataset(Dataset):
                         f"No {self.file_extension} files found in {ct_dir}, skipping"
                     )
                     continue
-                timepoint_paths[str(row["timepoint"])] = paths
+                timepoint_paths[timepoint] = paths
 
             if not timepoint_paths:
                 logger.warning(
