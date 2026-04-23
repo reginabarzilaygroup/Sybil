@@ -5,8 +5,13 @@ Use Sybil or Sybil2 to run inference.
 
 Modes
 -----
-  single   Score one exam (Sybil v1, single DICOM directory).
-  batch    Score a cohort from a CSV manifest (Sybil2, supports multi-GPU).
+  single   Score one patient (v1: single DICOM dir; v2: baseline + optional followup).
+  batch    Score a cohort from a CSV manifest (Sybil2 only, supports multi-GPU).
+
+Model version
+-------------
+Both modes accept --model-version {v1, v2}. Defaults: single=v1, batch=v2.
+batch with v1 is rejected because Sybil v1 has no cohort runner.
 """
 
 import argparse
@@ -49,6 +54,7 @@ def _get_parser() -> argparse.ArgumentParser:
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("-v", "--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="mode", required=True)
 
     # ------------------------------------------------------------------
@@ -56,11 +62,39 @@ def _get_parser() -> argparse.ArgumentParser:
     # ------------------------------------------------------------------
     single = subparsers.add_parser(
         "single",
-        help="Score a single exam (Sybil v1).",
+        help="Score a single patient (v1: one DICOM dir; v2: baseline + optional followup).",
     )
     single.add_argument(
         "image_dir",
-        help="Directory containing DICOM or PNG files for one exam.",
+        help=(
+            "Directory of DICOM/PNG files for one exam (v1) "
+            "or the baseline timepoint (v2)."
+        ),
+    )
+    single.add_argument(
+        "--model-version",
+        default="v1",
+        choices=["v1", "v2"],
+        dest="model_version",
+        help="Sybil version to run. Default: v1.",
+    )
+    single.add_argument(
+        "--followup",
+        default=None,
+        dest="followup_dir",
+        help=(
+            "Followup DICOM/PNG directory. Only valid with --model-version v2 "
+            "for longitudinal inference. Omit for baseline-only v2 inference."
+        ),
+    )
+    single.add_argument(
+        "--cache-dir",
+        default=None,
+        dest="cache_dir",
+        help=(
+            "Directory for intermediate NIfTI files. "
+            "Required with --model-version v2."
+        ),
     )
     single.add_argument(
         "--output-dir",
@@ -73,14 +107,14 @@ def _get_parser() -> argparse.ArgumentParser:
         default=False,
         action="store_true",
         dest="return_attentions",
-        help="Save attention scores to attention_scores.pkl.",
+        help="(v1 only) Save attention scores to attention_scores.pkl.",
     )
     single.add_argument(
         "--write-attention-images",
         default=False,
         action="store_true",
         dest="write_attention_images",
-        help="Overlay attention on slices and write GIFs. Implies --return-attentions.",
+        help="(v1 only) Overlay attention on slices and write GIFs. Implies --return-attentions.",
     )
     single.add_argument(
         "--file-type",
@@ -102,7 +136,7 @@ def _get_parser() -> argparse.ArgumentParser:
     # ------------------------------------------------------------------
     batch = subparsers.add_parser(
         "batch",
-        help="Score a cohort from a CSV manifest (Sybil2).",
+        help="Score a cohort from a CSV manifest (Sybil2 only).",
     )
     batch.add_argument(
         "csv",
@@ -110,6 +144,13 @@ def _get_parser() -> argparse.ArgumentParser:
             "CSV manifest with columns: patient_id, timepoint, ct_dir "
             "[, label, censor_time]."
         ),
+    )
+    batch.add_argument(
+        "--model-version",
+        default="v2",
+        choices=["v2"],
+        dest="model_version",
+        help="Sybil version. Only v2 supports batch (v1 has no cohort runner). Default: v2.",
     )
     batch.add_argument(
         "--output",
@@ -228,6 +269,73 @@ def predict_single(
 
 
 # ---------------------------------------------------------------------------
+# Single-patient inference (Sybil2 — baseline + optional followup)
+# ---------------------------------------------------------------------------
+
+def predict_single_v2(
+    baseline_dir: str,
+    output_dir: str,
+    cache_dir: str,
+    followup_dir: typing.Optional[str] = None,
+    file_type: Literal["auto", "dicom", "png"] = "auto",
+    threads: int = 0,
+):
+    """Score one patient with Sybil2.
+
+    Accepts a baseline DICOM/PNG directory and an optional followup directory
+    for longitudinal (two-timepoint) inference.
+    """
+    def _list_files(directory: str) -> list:
+        entries = [
+            os.path.join(directory, f)
+            for f in os.listdir(directory)
+            if not f.startswith(".")
+        ]
+        return sorted(f for f in entries if os.path.isfile(f))
+
+    baseline_files = _list_files(baseline_dir)
+    timepoints = {0: baseline_files}
+    if followup_dir is not None:
+        timepoints[1] = _list_files(followup_dir)
+
+    voxel_spacing = None
+    if file_type == "auto":
+        all_files = baseline_files + (timepoints.get(1, []) or [])
+        extensions = {os.path.splitext(f)[1].lower() for f in all_files}
+        if extensions <= {".png"}:
+            file_type = "png"
+            voxel_spacing = sybil.datasets.utils.VOXEL_SPACING
+        else:
+            file_type = "dicom"
+
+    assert file_type in {"dicom", "png"}
+    file_type = typing.cast(Literal["dicom", "png"], file_type)
+    logger.debug(
+        f"Sybil2 single-patient inference: {len(timepoints)} timepoint(s), "
+        f"{sum(len(v) for v in timepoints.values())} {file_type} file(s)"
+    )
+
+    serie = Serie(
+        timepoints,
+        voxel_spacing=voxel_spacing,
+        file_type=file_type,
+        version="v2",
+        cache_dir=cache_dir,
+    )
+    model = Sybil2()
+    prediction = model.predict([serie], threads=threads)
+
+    pred_dict = {"predictions": prediction.scores}
+    os.makedirs(output_dir, exist_ok=True)
+    pred_path = os.path.join(output_dir, "prediction_scores.json")
+    with open(pred_path, "w") as f:
+        json.dump(pred_dict, f, indent=2)
+    logger.debug(f"Scores written to {pred_path}")
+
+    return pred_dict
+
+
+# ---------------------------------------------------------------------------
 # Batch / distributed inference (Sybil2)
 # ---------------------------------------------------------------------------
 
@@ -272,19 +380,42 @@ def main():
     sybil.utils.logging_utils.configure_logger(args.loglevel)
 
     if args.mode == "single":
-        os.makedirs(args.output_dir, exist_ok=True)
-        pred_dict, _ = predict_single(
-            image_dir=args.image_dir,
-            output_dir=args.output_dir,
-            model_name=args.model_name,
-            return_attentions=args.return_attentions,
-            write_attention_images=args.write_attention_images,
-            file_type=args.file_type,
-            threads=args.threads,
-        )
-        print(json.dumps(pred_dict, indent=2))
+        if args.model_version == "v1":
+            if args.followup_dir is not None:
+                parser.error("--followup is only valid with --model-version v2")
+            if args.cache_dir is not None:
+                parser.error("--cache-dir is only valid with --model-version v2")
+            os.makedirs(args.output_dir, exist_ok=True)
+            pred_dict, _ = predict_single(
+                image_dir=args.image_dir,
+                output_dir=args.output_dir,
+                model_name=args.model_name,
+                return_attentions=args.return_attentions,
+                write_attention_images=args.write_attention_images,
+                file_type=args.file_type,
+                threads=args.threads,
+            )
+            print(json.dumps(pred_dict, indent=2))
+
+        else:  # v2
+            if args.cache_dir is None:
+                parser.error("--cache-dir is required with --model-version v2")
+            if args.return_attentions or args.write_attention_images:
+                parser.error(
+                    "--return-attentions and --write-attention-images are v1-only"
+                )
+            pred_dict = predict_single_v2(
+                baseline_dir=args.image_dir,
+                output_dir=args.output_dir,
+                cache_dir=args.cache_dir,
+                followup_dir=args.followup_dir,
+                file_type=args.file_type,
+                threads=args.threads,
+            )
+            print(json.dumps(pred_dict, indent=2))
 
     elif args.mode == "batch":
+        # argparse already restricts --model-version to v2 for batch.
         results = predict_batch(
             csv=args.csv,
             output_path=args.output_path,
