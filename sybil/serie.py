@@ -11,7 +11,7 @@ import SimpleITK as sitk
 import torchio as tio
 import torch.nn.functional as F
 from monai.data import MetaTensor
-from monai.transforms import ResizeWithPadOrCrop, ScaleIntensity
+from monai.transforms import ResizeWithPadOrCrop, ScaleIntensity, Spacing
 from loguru import logger
 from sybil.datasets.utils import order_slices, VOXEL_SPACING
 from sybil.utils.loading import get_sample_loader
@@ -68,6 +68,7 @@ class Serie:
         split: Literal["train", "dev", "test"] = "test",
         version: Literal["v1", "v2"] = "v1",
         cache_dir: Optional[str] = None,
+        target_voxel_spacing: Optional[List[float]] = None,
     ):
         """Initialize a Serie.
 
@@ -97,6 +98,11 @@ class Serie:
         `cache_dir`: Optional[str]
             Optional directory to use for caching processed images. If None, no caching is used.
             Caching can speed up loading for large datasets, but requires additional disk space.
+        `target_voxel_spacing`: Optional[List[float]]
+            The desired voxel spacing for the output images. If provided, images will be resampled
+            to this spacing. Should be in the format [row_spacing, col_spacing, slice_thickness].
+            To only downsample in the z-dimension,
+            set the row and col spacing to None (e.g. [None, None, 2.5])
         """
         if label is not None and censor_time is None:
             raise ValueError("censor_time should also provided with label.")
@@ -111,9 +117,9 @@ class Serie:
             )
 
         if self._is_version2:
-            assert cache_dir is not None, (
-                "Version 2 requires a cache directory for storing intermediate NIfTI files."
-            )
+            assert (
+                cache_dir is not None
+            ), "Version 2 requires a cache directory for storing intermediate NIfTI files."
 
         self._cache_dir = cache_dir
 
@@ -138,13 +144,14 @@ class Serie:
                 k: self._load_metadata(dcms, voxel_spacing, file_type)
                 for k, dcms in dicoms.items()
             }
+            self._target_voxel_spacing = target_voxel_spacing
 
         self._loader = get_sample_loader(split, args, version=version)
 
     def _convert_dicom_dicts_to_paths(self, dicoms: Dict[str, List[str]]) -> List[str]:
-        assert len(dicoms) == 1, (
-            "Expected only one dicom dict when multi_scan is False."
-        )
+        assert (
+            len(dicoms) == 1
+        ), "Expected only one dicom dict when multi_scan is False."
         key = list(dicoms.keys())[0]
         return dicoms[key]
 
@@ -229,6 +236,30 @@ class Serie:
             rve_volume = self._get_volume_for_rve(
                 sitk_volume, "{}_{}".format(meta.identifier, key)
             )
+            if self._target_voxel_spacing is not None:
+                spacing_y, spacing_x, spacing_z = sitk_volume.GetSpacing()
+                affine = np.diag([spacing_y, spacing_x, spacing_z, 1.0])
+                target_spacing = []
+                for i, s in enumerate(self._target_voxel_spacing):
+                    if s is not None:
+                        target_spacing.append(s)
+                    else:
+                        target_spacing.append(sitk_volume.GetSpacing()[i])
+                resampler = Spacing(
+                    pixdim=tuple(target_spacing),
+                    mode="bilinear",
+                )
+                meta_volume = MetaTensor(
+                    torch.from_numpy(
+                        nifti_volume.transpose(1, 2, 0)[np.newaxis].astype(np.float32)
+                    ),  # (1, H, W, D)
+                    affine=torch.from_numpy(affine),
+                )
+                resampled = resampler(meta_volume)
+                nifti_volume = resampled.numpy()[0].transpose(
+                    2, 0, 1
+                )  # back to (H, W, D)
+
             segmentation_volume = self._get_volume_for_segmentation(nifti_volume, meta)
             volumes[key] = InputV2(
                 lungmask_volume=nifti_volume,  # shared with confidence model
@@ -241,10 +272,10 @@ class Serie:
         self, sitk_volume: sitk.Image, accession: str
     ) -> Optional[torch.Tensor]:
         rve_path = self._loader["pillar"].rve_processor(
-            # flip because Pillar / Sybil1.5 was trained on mostly axial scans 
+            # flip because Pillar / Sybil1.5 was trained on mostly axial scans
             # with z-axis flipped compared to ITK convention (InstanceNumber vs ImagePositionPatient)
             # so we flip to maintain consistency with the training data
-            sitk.Flip(sitk_volume, [False, False, True]), 
+            sitk.Flip(sitk_volume, [False, False, True]),
             output_dir=self._cache_dir,
             accession=accession,
             series_number=1,
@@ -540,7 +571,9 @@ class Serie:
                 zmin : zmax + 1, ymin : ymax + 1, xmin : xmax + 1
             ].permute(1, 2, 0)
 
-            patchx = scale_intensity(resize_with_pad_or_crop(patchx.unsqueeze(0))).squeeze(0)
+            patchx = scale_intensity(
+                resize_with_pad_or_crop(patchx.unsqueeze(0))
+            ).squeeze(0)
             patchl = resize_with_pad_or_crop(patchl.unsqueeze(0)).squeeze(0)
 
             patches.append(torch.stack([patchx, patchl]))  # (2, H_crop, W_crop, D_crop)
@@ -606,14 +639,16 @@ class Serie:
             zmax = min(img_d, zmin + D_CROP)
 
             patch = image[ymin:ymax, xmin:xmax, zmin:zmax]
-            patch = scale_intensity(resize_with_pad_or_crop(patch.unsqueeze(0))).squeeze(0)
+            patch = scale_intensity(
+                resize_with_pad_or_crop(patch.unsqueeze(0))
+            ).squeeze(0)
 
             patches.append(patch)  # (H_crop, W_crop, D_crop)
 
             # image_dict = self.patch_augmentations._transform(image_dict) # ResizeWithPadOrCropd
             # image_dict = self.patch_augmentations.predict_transforms.transforms[-1]( # ScaleIntensityd
-                #     image_dict
-                # )
+            #     image_dict
+            # )
 
         if patches:
             patches = torch.stack(patches)  # (N, H_crop, W_crop, D_crop)
