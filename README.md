@@ -6,6 +6,15 @@ Lung Cancer Risk Prediction.
 
 Additional documentation can be found on the [GitHub Wiki](https://github.com/reginabarzilaygroup/Sybil/wiki).
 
+# Desktop App: AXIO PREDICT
+
+[**AXIO PREDICT**](https://github.com/godsonj64/AXIOPREDICT) is a free, open-source (MIT) cross-platform desktop application that runs the Sybil ensemble locally behind a graphical interface — no coding required. It accepts DICOM or PNG LDCT series, produces calibrated 1–6 year lung-cancer risk scores, visualises Sybil's attention maps, and includes an audit toolkit for inspecting prediction quality. All inference runs on-device, so no patient data leaves the machine.
+
+- **Download:** [latest release](https://github.com/godsonj64/AXIOPREDICT/releases/latest) — prebuilt **Windows** (installer & portable) and **macOS** (Universal DMG, Apple Silicon + Intel); Linux builds from source
+- **Source & docs:** https://github.com/godsonj64/AXIOPREDICT
+
+> AXIO PREDICT is an independent community project built on Sybil and intended for research use only. Please cite the Sybil paper (see [Cite](#cite)) when using it.
+
 # Run a regression test
 
 ```shell
