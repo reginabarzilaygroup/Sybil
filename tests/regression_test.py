@@ -115,7 +115,7 @@ class TestPredict(unittest.TestCase):
     def test_demo_data(self):
         if not os.environ.get("SYBIL_TEST_RUN_REGRESSION", "false").lower() == "true":
             import pytest
-            pytest.skip(f"Skipping long-running test in {type(self)}.")
+            pytest.skip(f"Skipping long-running test in {type(self)}. Set SYBIL_TEST_RUN_REGRESSION=true if you wish to run this test.")
 
         if device_utils.get_default_device().type == "cpu":
             warnings.warn(
@@ -209,7 +209,7 @@ class TestPredictionRegression(unittest.TestCase):
     def test_nlst_predict(self, allow_resume=True, delete_downloaded_files=False):
         if not os.environ.get("SYBIL_TEST_RUN_REGRESSION", "false").lower() == "true":
             import pytest
-            pytest.skip(f"Skipping long-running test in {type(self)}.")
+            pytest.skip(f"Skipping long-running test in {type(self)}. Set SYBIL_TEST_RUN_REGRESSION=true if you wish to run this test.")
 
         test_series_list = test_series_uids.split("\n")
         test_series_list = [x.strip() for x in test_series_list if x.strip()]
@@ -332,7 +332,7 @@ class TestPredictionRegression(unittest.TestCase):
     def test_compare_predict_scores(self):
         if not os.environ.get("SYBIL_TEST_RUN_REGRESSION", "false").lower() == "true":
             import pytest
-            pytest.skip(f"Skipping long-running test '{type(self)}'.")
+            pytest.skip(f"Skipping long-running test '{type(self)}'. Set SYBIL_TEST_RUN_REGRESSION=true if you wish to run this test.")
 
         default_baseline_preds_path = os.path.join(PROJECT_DIR, "tests",
                                                    "nlst_predictions", "nlst_predictions_ark_v1.4.0.json")
