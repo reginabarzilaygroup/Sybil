@@ -115,7 +115,16 @@ class TestPredict(unittest.TestCase):
     def test_demo_data(self):
         if not os.environ.get("SYBIL_TEST_RUN_REGRESSION", "false").lower() == "true":
             import pytest
-            pytest.skip(f"Skipping long-running test in {type(self)}.")
+            pytest.skip(f"Skipping long-running test in {type(self)}. Set SYBIL_TEST_RUN_REGRESSION=true if you wish to run this test.")
+
+        if device_utils.get_default_device().type == "cpu":
+            warnings.warn(
+                "Sybil runs extremely slowly without a GPU. "
+                "Consider testing it in this cloud environment: https://lightning.ai/kiyaanpillai-org/notebook-experimentation-project/studios/sybil-playground/code?source=copylink. "
+                "(You may have to create a Lightning AI account)",
+                UserWarning,
+                stacklevel=1,
+            )
 
         # Download demo data
         demo_data_url = "https://www.dropbox.com/scl/fi/covbvo6f547kak4em3cjd/sybil_example.zip?rlkey=7a13nhlc9uwga9x7pmtk1cf1c&st=dqi0cf9k&dl=1"
@@ -200,7 +209,7 @@ class TestPredictionRegression(unittest.TestCase):
     def test_nlst_predict(self, allow_resume=True, delete_downloaded_files=False):
         if not os.environ.get("SYBIL_TEST_RUN_REGRESSION", "false").lower() == "true":
             import pytest
-            pytest.skip(f"Skipping long-running test in {type(self)}.")
+            pytest.skip(f"Skipping long-running test in {type(self)}. Set SYBIL_TEST_RUN_REGRESSION=true if you wish to run this test.")
 
         test_series_list = test_series_uids.split("\n")
         test_series_list = [x.strip() for x in test_series_list if x.strip()]
@@ -323,7 +332,7 @@ class TestPredictionRegression(unittest.TestCase):
     def test_compare_predict_scores(self):
         if not os.environ.get("SYBIL_TEST_RUN_REGRESSION", "false").lower() == "true":
             import pytest
-            pytest.skip(f"Skipping long-running test '{type(self)}'.")
+            pytest.skip(f"Skipping long-running test '{type(self)}'. Set SYBIL_TEST_RUN_REGRESSION=true if you wish to run this test.")
 
         default_baseline_preds_path = os.path.join(PROJECT_DIR, "tests",
                                                    "nlst_predictions", "nlst_predictions_ark_v1.4.0.json")
