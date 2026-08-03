@@ -6,6 +6,10 @@ Lung Cancer Risk Prediction.
 
 Additional documentation can be found on the [GitHub Wiki](https://github.com/reginabarzilaygroup/Sybil/wiki).
 
+# Installation
+
+Installation can be found in the Wiki. Note that you will need Python >=3.8, <3.11.
+
 # Run a regression test
 
 ```shell
