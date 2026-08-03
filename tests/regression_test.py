@@ -117,6 +117,14 @@ class TestPredict(unittest.TestCase):
             import pytest
             pytest.skip(f"Skipping long-running test in {type(self)}.")
 
+        if device_utils.get_default_device().type == "cpu":
+            warnings.warn(
+                "Sybil runs extremely slowly without a GPU. "
+                "Consider testing it in this cloud environment: https://lightning.ai/kiyaanpillai-org/notebook-experimentation-project/studios/data-exploration-devbox/code?source=copylink",
+                UserWarning,
+                stacklevel=1,
+            )
+
         # Download demo data
         demo_data_url = "https://www.dropbox.com/scl/fi/covbvo6f547kak4em3cjd/sybil_example.zip?rlkey=7a13nhlc9uwga9x7pmtk1cf1c&st=dqi0cf9k&dl=1"
         expected_scores = [
