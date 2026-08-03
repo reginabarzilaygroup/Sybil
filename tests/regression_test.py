@@ -120,7 +120,8 @@ class TestPredict(unittest.TestCase):
         if device_utils.get_default_device().type == "cpu":
             warnings.warn(
                 "Sybil runs extremely slowly without a GPU. "
-                "Consider testing it in this cloud environment: https://lightning.ai/kiyaanpillai-org/notebook-experimentation-project/studios/data-exploration-devbox/code?source=copylink",
+                "Consider testing it in this cloud environment: https://lightning.ai/kiyaanpillai-org/notebook-experimentation-project/studios/data-exploration-devbox/code?source=copylink. "
+                "(You may have to create a Lightning AI account)",
                 UserWarning,
                 stacklevel=1,
             )
