@@ -51,6 +51,8 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 tests/*calibrations.json
+tests/nlst_predictions/
+regression_test_output/
 
 # Translations
 *.mo
